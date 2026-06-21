@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Summoner bot dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .card { background: #f1efe8; border-radius: 8px; padding: 1rem; }
+  .card p:first-child { font-size: 13px; color: #5f5e5a; margin: 0 0 6px; }
+  .card p:last-child { font-size: 24px; font-weight: 500; margin: 0; }
+  .panel { border: 1px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { color: #5f5e5a; font-weight: 500; }
+  select { margin-right: 8px; }
+</style>
+</head>
+<body>
+
+<div>
+  <select id="rangeFilter">
+    <option value="7">Last 7 days</option>
+    <option value="30">Last 30 days</option>
+    <option value="0">All time</option>
+  </select>
+  <select id="hourFilter">
+    <option value="all">All hours</option>
+    <option value="morning">Morning (6-12)</option>
+    <option value="afternoon">Afternoon (12-18)</option>
+    <option value="evening">Evening (18-24)</option>
+    <option value="night">Night (0-6)</option>
+  </select>
+  <span id="liveStatus" style="float:right; font-size:13px; color:#5f5e5a;"></span>
+</div>
+
+<div class="cards">
+  <div class="card"><p>Total runs</p><p id="statRuns">-</p></div>
+  <div class="card"><p>Total trials</p><p id="statTrials">-</p></div>
+  <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
+  <div class="card"><p>Avg runs / key</p><p id="statRunsPerKey">-</p></div>
+</div>
+
+<div class="panel">
+  <p><strong>Boss detection success by arm</strong></p>
+  <canvas id="armChart" height="180"></canvas>
+</div>
+
+<div class="panel">
+  <p><strong>Live run feed</strong></p>
+  <table>
+    <thead><tr><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
+    <tbody id="feedBody"></tbody>
+  </table>
+</div>
+
+<script>
+const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function hourBucket(hour) {
+  if (hour >= 6 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 18) return "afternoon";
+  if (hour >= 18 && hour < 24) return "evening";
+  return "night";
+}
+
+function rangeStartIso(days) {
+  if (days === 0) return "1970-01-01T00:00:00Z";
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
+}
+
+async function loadRuns() {
+  const days = parseInt(document.getElementById("rangeFilter").value, 10);
+  const hourSel = document.getElementById("hourFilter").value;
+  const { data, error } = await sb
+    .from("summoner_runs")
+    .select("*")
+    .gte("started_at", rangeStartIso(days))
+    .order("started_at", { ascending: false })
+    .limit(2000);
+  if (error) {
+    document.getElementById("liveStatus").textContent = "data unavailable";
+    return [];
+  }
+  if (hourSel === "all") return data;
+  return data.filter(r => hourBucket(new Date(r.started_at).getHours()) === hourSel);
+}
+
+async function loadTrialCount() {
+  const { count } = await sb.from("summoner_trials").select("*", { count: "exact", head: true });
+  return count || 0;
+}
+
+function fmtSeconds(s) {
+  const m = Math.floor(s / 60);
+  const r = Math.round(s % 60);
+  return m > 0 ? `${m}m ${r}s` : `${r}s`;
+}
+
+function renderStats(runs, trialCount) {
+  document.getElementById("statRuns").textContent = runs.length;
+  document.getElementById("statTrials").textContent = trialCount;
+  if (runs.length > 0) {
+    const totalDur = runs.reduce((sum, r) => sum + (new Date(r.ended_at) - new Date(r.started_at)) / 1000, 0);
+    document.getElementById("statAvgTime").textContent = fmtSeconds(totalDur / runs.length);
+  } else {
+    document.getElementById("statAvgTime").textContent = "-";
+  }
+  const keyRuns = runs.filter(r => (r.loots || []).some(l => l.is_key));
+  document.getElementById("statRunsPerKey").textContent =
+    keyRuns.length > 0 ? (runs.length / keyRuns.length).toFixed(1) : "-";
+}
+
+let chart = null;
+function renderArmChart(runs) {
+  const arms = ["NE", "NW", "SE", "SW"];
+  const counts = arms.map(arm => {
+    const armRuns = runs.filter(r => Object.keys(r.arm_detail || {}).includes(arm));
+    const total = armRuns.length || 1;
+    const base = armRuns.filter(r => r.found_direction === arm && r.found_method === "base").length;
+    const pillar = armRuns.filter(r => r.found_direction === arm && r.found_method === "pillar").length;
+    const missed = total - base - pillar;
+    return { base: 100 * base / total, pillar: 100 * pillar / total, missed: 100 * missed / total };
+  });
+  const ctx = document.getElementById("armChart");
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: arms,
+      datasets: [
+        { label: "base", data: counts.map(c => c.base), backgroundColor: "#1D9E75", stack: "s" },
+        { label: "pillar", data: counts.map(c => c.pillar), backgroundColor: "#378ADD", stack: "s" },
+        { label: "missed", data: counts.map(c => c.missed), backgroundColor: "#888780", stack: "s" },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + "%" } } },
+    },
+  });
+}
+
+function timeAgo(iso) {
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  return `${Math.round(seconds / 3600)}h ago`;
+}
+
+function renderFeed(runs) {
+  const tbody = document.getElementById("feedBody");
+  tbody.innerHTML = "";
+  runs.slice(0, 30).forEach(r => {
+    const loot = (r.loots || []).map(l => l.label).join(", ") || "-";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>#${r.run_num}</td><td>${r.found_direction || "?"}</td>` +
+      `<td>${r.found_method || "miss"}</td><td>${loot}</td><td>${timeAgo(r.ended_at)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function refresh() {
+  const [runs, trialCount] = await Promise.all([loadRuns(), loadTrialCount()]);
+  renderStats(runs, trialCount);
+  renderArmChart(runs);
+  renderFeed(runs);
+}
+
+document.getElementById("rangeFilter").addEventListener("change", refresh);
+document.getElementById("hourFilter").addEventListener("change", refresh);
+
+sb.channel("summoner_runs_live")
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "summoner_runs" }, () => {
+    document.getElementById("liveStatus").textContent = "live - updated " + new Date().toLocaleTimeString();
+    refresh();
+  })
+  .subscribe();
+
+refresh();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '0 0 */6 * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase to prevent free-tier auto-pause
+        run: |
+          curl -sf -o /dev/null \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/summoner_trials?select=trial_id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
