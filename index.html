@@ -452,15 +452,38 @@ async function deleteTrial(trialId) {
   if (!confirm(`Permanently delete trial ${trialId} and its ${runs.length} run(s)? This cannot be undone.`)) {
     return;
   }
-  const { error: runsErr } = await sb.from("summoner_runs").delete().eq("trial_id", trialId);
+  // .select() after .delete() asks PostgREST to return the deleted rows
+  // (Prefer: return=representation) instead of an empty body. This is the
+  // only way to detect a *silent* no-op delete: if the database's delete
+  // policy doesn't grant this key permission, Postgres RLS filters the
+  // delete down to zero matching rows rather than raising an error — the
+  // request comes back HTTP 200 with error=null, but data=[] and nothing
+  // was actually removed. Checking only `error` (as an earlier version of
+  // this function did) misses this case entirely.
+  const { data: deletedRuns, error: runsErr } =
+    await sb.from("summoner_runs").delete().eq("trial_id", trialId).select();
   if (runsErr) {
     alert(`Delete failed (runs): ${runsErr.message}. Nothing was removed for ${trialId}.`);
     return;
   }
-  const { error: trialErr } = await sb.from("summoner_trials").delete().eq("trial_id", trialId);
+  if (deletedRuns.length === 0 && runs.length > 0) {
+    alert(
+      `Delete request succeeded but removed 0 of ${runs.length} run(s) for ${trialId}. ` +
+      `This usually means the database's delete policy hasn't been added yet ` +
+      `(see supabase/migrations/0002_summoner_dashboard_delete.sql) — nothing was deleted.`
+    );
+    return;
+  }
+  const { data: deletedTrials, error: trialErr } =
+    await sb.from("summoner_trials").delete().eq("trial_id", trialId).select();
   if (trialErr) {
     alert(`Runs were deleted, but the trial record itself failed to delete: ${trialErr.message}. ` +
           `Trial ${trialId} will show with 0 runs until you delete it again.`);
+  } else if (deletedTrials.length === 0) {
+    alert(
+      `Runs were deleted, but the trial record itself was not removed (likely the same missing ` +
+      `delete policy). Trial ${trialId} will show with 0 runs until you delete it again.`
+    );
   }
   document.getElementById("trialPicker").value = "";
   clearTrialDetail();
