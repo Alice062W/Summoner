@@ -22,6 +22,12 @@
   .expand-btn { cursor: pointer; border: none; background: none; font-size: 12px; color: #5f5e5a; padding: 0 4px; }
   .detail-row td { background: #f9f8f4; font-size: 12px; padding: 10px 12px; }
   .detail-row th.arm-cell, .detail-row td.arm-cell { padding: 3px 8px; }
+  .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .status-dot.green { background: #1D9E75; }
+  .status-dot.red { background: #E24B4A; }
+  .loot-tally { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .loot-tally span { background: #f1efe8; border-radius: 6px; padding: 3px 10px; font-size: 13px; }
+  .loot-tally span.key-group { background: #FAEEDA; color: #854F0B; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -32,13 +38,19 @@
 </div>
 
 <div id="liveTabPanel">
-  <div id="liveIdle" class="panel" style="display:none;">
-    <p style="color:#5f5e5a; text-align:center; margin:0; padding:2rem 0;">Idle — no trial running</p>
+  <div id="liveEmpty" class="panel" style="display:none;">
+    <p style="color:#5f5e5a; text-align:center; margin:0; padding:2rem 0;">No trial data yet</p>
   </div>
-  <div id="liveContent">
-    <div>
-      <span id="liveTrialLabel" style="font-size:13px; color:#5f5e5a;"></span>
-      <span id="liveStatus" style="float:right; font-size:13px; color:#5f5e5a;"></span>
+  <div id="liveContent" style="display:none;">
+    <div class="panel">
+      <div>
+        <span class="status-dot" id="liveStatusDot"></span>
+        <strong id="liveTrialLabel"></strong>
+        <span id="liveStatus" style="float:right; font-size:13px; color:#5f5e5a;"></span>
+      </div>
+      <p id="liveProgress" style="margin:10px 0 0; font-size:14px;"></p>
+      <p id="liveInProgress" style="margin:4px 0 0; font-size:13px; color:#378ADD;"></p>
+      <div class="loot-tally" id="liveLootTally"></div>
     </div>
     <div class="panel">
       <table>
@@ -76,12 +88,33 @@
     <p><strong>Boss detection success by arm</strong></p>
     <canvas id="armChart" height="180"></canvas>
   </div>
+
+  <div class="panel">
+    <p><strong>Trial detail</strong></p>
+    <select id="trialPicker"><option value="">Choose a trial…</option></select>
+    <table style="margin-top:12px;">
+      <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
+      <tbody id="trialDetailBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
 const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const LOOT_GROUPS = [
+  ["Runes", ["loot_rune"]],
+  ["Keys", ["loot_key", "loot_key_all"]],
+  ["Gems", ["loot_gem", "loot_gem_flawless", "loot_gem_perfect", "loot_gem_normal", "loot_gem_flawed", "loot_gem_chipped", "loot_skull", "loot_diamond"]],
+  ["Jewels", ["loot_jewel"]],
+  ["Charms", ["loot_charm"]],
+  ["Rings", ["loot_unique_ring"]],
+  ["Amulets", ["loot_unique_amulet"]],
+  ["Uniq. Boots", ["loot_unique_boot1", "loot_unique_boot2"]],
+  ["W. Shards", ["loot_worldstone_shard"]],
+];
 
 function showTab(name) {
   document.getElementById("liveTabPanel").style.display = name === "live" ? "" : "none";
@@ -129,18 +162,22 @@ function fmtSeconds(s) {
   return m > 0 ? `${m}m ${r}s` : `${r}s`;
 }
 
+function avgDurationLabel(runs) {
+  if (runs.length === 0) return "-";
+  const totalDur = runs.reduce((sum, r) => sum + (new Date(r.ended_at) - new Date(r.started_at)) / 1000, 0);
+  return fmtSeconds(totalDur / runs.length);
+}
+
+function avgRunsPerKeyLabel(runs) {
+  const keyRuns = runs.filter(r => (r.loots || []).some(l => l.is_key));
+  return keyRuns.length > 0 ? (runs.length / keyRuns.length).toFixed(1) : "-";
+}
+
 function renderStats(runs, trialCount) {
   document.getElementById("statRuns").textContent = runs.length;
   document.getElementById("statTrials").textContent = trialCount;
-  if (runs.length > 0) {
-    const totalDur = runs.reduce((sum, r) => sum + (new Date(r.ended_at) - new Date(r.started_at)) / 1000, 0);
-    document.getElementById("statAvgTime").textContent = fmtSeconds(totalDur / runs.length);
-  } else {
-    document.getElementById("statAvgTime").textContent = "-";
-  }
-  const keyRuns = runs.filter(r => (r.loots || []).some(l => l.is_key));
-  document.getElementById("statRunsPerKey").textContent =
-    keyRuns.length > 0 ? (runs.length / keyRuns.length).toFixed(1) : "-";
+  document.getElementById("statAvgTime").textContent = avgDurationLabel(runs);
+  document.getElementById("statRunsPerKey").textContent = avgRunsPerKeyLabel(runs);
 }
 
 let chart = null;
@@ -180,17 +217,17 @@ function timeAgo(iso) {
   return `${Math.round(seconds / 3600)}h ago`;
 }
 
-async function loadActiveTrial() {
+async function loadMostRecentTrial() {
   const { data, error } = await sb
     .from("summoner_trials")
     .select("*")
     .order("started_at", { ascending: false })
     .limit(1);
   if (error || !data || data.length === 0) return null;
-  return data[0].ended_at ? null : data[0];
+  return data[0];
 }
 
-async function loadLiveFeed(trialId) {
+async function loadRunsForTrial(trialId) {
   const { data, error } = await sb
     .from("summoner_runs")
     .select("*")
@@ -246,10 +283,8 @@ function toggleDetail(rowId) {
   row.style.display = row.style.display === "none" ? "" : "none";
 }
 
-function renderLiveFeed(runs) {
-  const tbody = document.getElementById("liveFeedBody");
-  // Remember which detail rows are currently expanded so a realtime refresh
-  // (which rebuilds the whole tbody) doesn't yank a row closed mid-read.
+function renderRunFeed(tbodyId, runs, idPrefix) {
+  const tbody = document.getElementById(tbodyId);
   const expanded = new Set(
     [...tbody.querySelectorAll(".detail-row")]
       .filter(row => row.style.display !== "none")
@@ -258,7 +293,7 @@ function renderLiveFeed(runs) {
   tbody.innerHTML = "";
   runs.forEach(r => {
     const loot = (r.loots || []).map(l => l.label).join(", ") || "-";
-    const detailId = `liveDetail${r.id}`;
+    const detailId = `${idPrefix}${r.id}`;
 
     const summaryRow = document.createElement("tr");
     summaryRow.innerHTML =
@@ -279,18 +314,53 @@ function renderLiveFeed(runs) {
   });
 }
 
+function renderLootTally(runs) {
+  const el = document.getElementById("liveLootTally");
+  el.innerHTML = "";
+  const allKeys = runs.flatMap(r => (r.loots || []).map(l => l.key || l.label));
+  LOOT_GROUPS.forEach(([group, keys]) => {
+    const count = allKeys.filter(k => keys.includes(k)).length;
+    if (count === 0) return;
+    const span = document.createElement("span");
+    if (group === "Keys") span.className = "key-group";
+    span.textContent = `${group}: ${count}`;
+    el.appendChild(span);
+  });
+  if (el.children.length === 0) {
+    const span = document.createElement("span");
+    span.textContent = "No loot yet";
+    el.appendChild(span);
+  }
+}
+
 async function refreshLive() {
-  const trial = await loadActiveTrial();
+  const trial = await loadMostRecentTrial();
   if (!trial) {
-    document.getElementById("liveIdle").style.display = "";
+    document.getElementById("liveEmpty").style.display = "";
     document.getElementById("liveContent").style.display = "none";
     return;
   }
-  document.getElementById("liveIdle").style.display = "none";
+  document.getElementById("liveEmpty").style.display = "none";
   document.getElementById("liveContent").style.display = "";
-  document.getElementById("liveTrialLabel").textContent = "Trial " + trial.trial_id;
-  const runs = await loadLiveFeed(trial.trial_id);
-  renderLiveFeed(runs);
+
+  const isRunning = !trial.ended_at;
+  document.getElementById("liveStatusDot").className = "status-dot " + (isRunning ? "green" : "red");
+  document.getElementById("liveTrialLabel").textContent =
+    (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id;
+
+  const runs = await loadRunsForTrial(trial.trial_id);
+  document.getElementById("liveProgress").textContent =
+    `${runs.length} / ${trial.max_runs ?? "?"} runs — avg ${avgDurationLabel(runs)}/run — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
+
+  const inProgressEl = document.getElementById("liveInProgress");
+  if (isRunning && trial.max_runs && runs.length < trial.max_runs) {
+    inProgressEl.textContent = `Run ${runs.length + 1} in progress…`;
+  } else {
+    inProgressEl.textContent = "";
+  }
+
+  renderLootTally(runs);
+  renderRunFeed("liveFeedBody", runs, "liveDetail");
 }
 
 async function refreshHistory() {
@@ -298,6 +368,38 @@ async function refreshHistory() {
   renderStats(runs, trialCount);
   renderArmChart(runs);
 }
+
+async function loadTrialList() {
+  const { data, error } = await sb
+    .from("summoner_trials")
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(100);
+  return error ? [] : data;
+}
+
+async function populateTrialPicker() {
+  const trials = await loadTrialList();
+  const sel = document.getElementById("trialPicker");
+  sel.innerHTML = '<option value="">Choose a trial…</option>';
+  trials.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.trial_id;
+    const when = new Date(t.started_at).toLocaleString();
+    opt.textContent = `${t.trial_id} — ${when} (${t.max_runs ?? "?"} planned)`;
+    sel.appendChild(opt);
+  });
+}
+
+document.getElementById("trialPicker").addEventListener("change", async (e) => {
+  const trialId = e.target.value;
+  if (!trialId) {
+    document.getElementById("trialDetailBody").innerHTML = "";
+    return;
+  }
+  const runs = await loadRunsForTrial(trialId);
+  renderRunFeed("trialDetailBody", runs, "histDetail");
+});
 
 document.getElementById("rangeFilter").addEventListener("change", refreshHistory);
 document.getElementById("hourFilter").addEventListener("change", refreshHistory);
@@ -308,10 +410,15 @@ sb.channel("summoner_runs_live")
     refreshLive();
     refreshHistory();
   })
+  .on("postgres_changes", { event: "*", schema: "public", table: "summoner_trials" }, () => {
+    refreshLive();
+    populateTrialPicker();
+  })
   .subscribe();
 
 refreshLive();
 refreshHistory();
+populateTrialPicker();
 </script>
 </body>
 </html>
