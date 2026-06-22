@@ -27,7 +27,9 @@
   .status-dot.red { background: #E24B4A; }
   .loot-tally { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .loot-tally span { background: #f1efe8; border-radius: 6px; padding: 3px 10px; font-size: 13px; }
-  .loot-tally span.key-group { background: #FAEEDA; color: #854F0B; font-weight: 500; }
+  .loot-tally span.key-group { background: #FAEEDA; color: #854F0B; font-weight: 700; }
+  .key-item { color: #854F0B; font-weight: 700; }
+  #deleteTrialBtn { color: #E24B4A; border: 1px solid #E24B4A; background: #fff; cursor: pointer; padding: 4px 10px; border-radius: 6px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -92,6 +94,9 @@
   <div class="panel">
     <p><strong>Trial detail</strong></p>
     <select id="trialPicker"><option value="">Choose a trial…</option></select>
+    <button id="deleteTrialBtn" style="display:none;">Delete this trial</button>
+    <p id="trialDetailProgress" style="margin:10px 0 0; font-size:14px;"></p>
+    <div class="loot-tally" id="trialDetailLootTally"></div>
     <table style="margin-top:12px;">
       <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
       <tbody id="trialDetailBody"></tbody>
@@ -104,6 +109,12 @@ const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Deterrent against accidental/casual deletion only — not real access
+// control. This constant is visible to anyone who views the page source,
+// and enabling delete at all means the anon key (already public) gains
+// real delete capability at the database level. See design doc Part 3.
+const DELETE_PASSPHRASE = "571028";
+
 const LOOT_GROUPS = [
   ["Runes", ["loot_rune"]],
   ["Keys", ["loot_key", "loot_key_all"]],
@@ -115,6 +126,11 @@ const LOOT_GROUPS = [
   ["Uniq. Boots", ["loot_unique_boot1", "loot_unique_boot2"]],
   ["W. Shards", ["loot_worldstone_shard"]],
 ];
+
+const LOOT_ICONS = {
+  "Runes": "🪨", "Keys": "🔑", "Gems": "💎", "Jewels": "💠", "Charms": "🍀",
+  "Rings": "💍", "Amulets": "📿", "Uniq. Boots": "👢", "W. Shards": "✨",
+};
 
 function showTab(name) {
   document.getElementById("liveTabPanel").style.display = name === "live" ? "" : "none";
@@ -237,8 +253,22 @@ async function loadRunsForTrial(trialId) {
   return data;
 }
 
+async function loadTrialList() {
+  const { data, error } = await sb
+    .from("summoner_trials")
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(100);
+  return error ? [] : data;
+}
+
 function fmtScore(v) {
   return (v === null || v === undefined) ? "n/a" : v.toFixed(3);
+}
+
+function lootItemHtml(l) {
+  const label = l.label || l.key || "?";
+  return l.is_key ? `<span class="key-item">🔑 ${label}</span>` : label;
 }
 
 function renderArmDetailHtml(run) {
@@ -256,7 +286,7 @@ function renderArmDetailHtml(run) {
   if (!rows) rows = '<tr><td colspan="3">no arm data</td></tr>';
 
   const lootRows = (run.loots || []).map(l =>
-    `<li>${l.label}${(l.score !== undefined && l.score !== null) ? ` — ${l.score.toFixed(3)} (> ${l.threshold !== undefined && l.threshold !== null ? l.threshold.toFixed(2) : "?"})` : ""}</li>`
+    `<li>${lootItemHtml(l)}${(l.score !== undefined && l.score !== null) ? ` — ${l.score.toFixed(3)} (> ${l.threshold !== undefined && l.threshold !== null ? l.threshold.toFixed(2) : "?"})` : ""}</li>`
   ).join("") || "<li>(none)</li>";
 
   return `
@@ -292,7 +322,7 @@ function renderRunFeed(tbodyId, runs, idPrefix) {
   );
   tbody.innerHTML = "";
   runs.forEach(r => {
-    const loot = (r.loots || []).map(l => l.label).join(", ") || "-";
+    const loot = (r.loots || []).map(lootItemHtml).join(", ") || "-";
     const detailId = `${idPrefix}${r.id}`;
 
     const summaryRow = document.createElement("tr");
@@ -314,8 +344,8 @@ function renderRunFeed(tbodyId, runs, idPrefix) {
   });
 }
 
-function renderLootTally(runs) {
-  const el = document.getElementById("liveLootTally");
+function renderLootTally(runs, elId) {
+  const el = document.getElementById(elId);
   el.innerHTML = "";
   const allKeys = runs.flatMap(r => (r.loots || []).map(l => l.key || l.label));
   LOOT_GROUPS.forEach(([group, keys]) => {
@@ -323,7 +353,7 @@ function renderLootTally(runs) {
     if (count === 0) return;
     const span = document.createElement("span");
     if (group === "Keys") span.className = "key-group";
-    span.textContent = `${group}: ${count}`;
+    span.textContent = `${LOOT_ICONS[group] || ""} ${group}: ${count}`;
     el.appendChild(span);
   });
   if (el.children.length === 0) {
@@ -331,6 +361,11 @@ function renderLootTally(runs) {
     span.textContent = "No loot yet";
     el.appendChild(span);
   }
+}
+
+function renderTrialSummary(elId, runs, maxRuns) {
+  document.getElementById(elId).textContent =
+    `${runs.length} / ${maxRuns ?? "?"} runs — avg ${avgDurationLabel(runs)}/run — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
 }
 
 async function refreshLive() {
@@ -349,8 +384,7 @@ async function refreshLive() {
     (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id;
 
   const runs = await loadRunsForTrial(trial.trial_id);
-  document.getElementById("liveProgress").textContent =
-    `${runs.length} / ${trial.max_runs ?? "?"} runs — avg ${avgDurationLabel(runs)}/run — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
+  renderTrialSummary("liveProgress", runs, trial.max_runs);
 
   const inProgressEl = document.getElementById("liveInProgress");
   if (isRunning && trial.max_runs && runs.length < trial.max_runs) {
@@ -359,7 +393,7 @@ async function refreshLive() {
     inProgressEl.textContent = "";
   }
 
-  renderLootTally(runs);
+  renderLootTally(runs, "liveLootTally");
   renderRunFeed("liveFeedBody", runs, "liveDetail");
 }
 
@@ -369,18 +403,10 @@ async function refreshHistory() {
   renderArmChart(runs);
 }
 
-async function loadTrialList() {
-  const { data, error } = await sb
-    .from("summoner_trials")
-    .select("*")
-    .order("started_at", { ascending: false })
-    .limit(100);
-  return error ? [] : data;
-}
-
 async function populateTrialPicker() {
   const trials = await loadTrialList();
   const sel = document.getElementById("trialPicker");
+  const prevValue = sel.value;
   sel.innerHTML = '<option value="">Choose a trial…</option>';
   trials.forEach(t => {
     const opt = document.createElement("option");
@@ -389,16 +415,64 @@ async function populateTrialPicker() {
     opt.textContent = `${t.trial_id} — ${when} (${t.max_runs ?? "?"} planned)`;
     sel.appendChild(opt);
   });
+  if (trials.some(t => t.trial_id === prevValue)) sel.value = prevValue;
 }
 
-document.getElementById("trialPicker").addEventListener("change", async (e) => {
-  const trialId = e.target.value;
+function clearTrialDetail() {
+  document.getElementById("trialDetailBody").innerHTML = "";
+  document.getElementById("trialDetailProgress").textContent = "";
+  document.getElementById("trialDetailLootTally").innerHTML = "";
+  document.getElementById("deleteTrialBtn").style.display = "none";
+}
+
+async function showTrialDetail(trialId) {
   if (!trialId) {
-    document.getElementById("trialDetailBody").innerHTML = "";
+    clearTrialDetail();
+    return;
+  }
+  const trials = await loadTrialList();
+  const trial = trials.find(t => t.trial_id === trialId);
+  const runs = await loadRunsForTrial(trialId);
+  renderTrialSummary("trialDetailProgress", runs, trial ? trial.max_runs : null);
+  renderLootTally(runs, "trialDetailLootTally");
+  renderRunFeed("trialDetailBody", runs, "histDetail");
+  const deleteBtn = document.getElementById("deleteTrialBtn");
+  deleteBtn.style.display = "";
+  deleteBtn.dataset.trialId = trialId;
+}
+
+async function deleteTrial(trialId) {
+  const entered = prompt("Enter passphrase to delete this trial:");
+  if (entered === null) return;
+  if (entered !== DELETE_PASSPHRASE) {
+    alert("Incorrect passphrase — nothing deleted.");
     return;
   }
   const runs = await loadRunsForTrial(trialId);
-  renderRunFeed("trialDetailBody", runs, "histDetail");
+  if (!confirm(`Permanently delete trial ${trialId} and its ${runs.length} run(s)? This cannot be undone.`)) {
+    return;
+  }
+  const { error: runsErr } = await sb.from("summoner_runs").delete().eq("trial_id", trialId);
+  if (runsErr) {
+    alert(`Delete failed (runs): ${runsErr.message}. Nothing was removed for ${trialId}.`);
+    return;
+  }
+  const { error: trialErr } = await sb.from("summoner_trials").delete().eq("trial_id", trialId);
+  if (trialErr) {
+    alert(`Runs were deleted, but the trial record itself failed to delete: ${trialErr.message}. ` +
+          `Trial ${trialId} will show with 0 runs until you delete it again.`);
+  }
+  document.getElementById("trialPicker").value = "";
+  clearTrialDetail();
+  await populateTrialPicker();
+  await refreshLive();
+  await refreshHistory();
+}
+
+document.getElementById("trialPicker").addEventListener("change", (e) => showTrialDetail(e.target.value));
+document.getElementById("deleteTrialBtn").addEventListener("click", () => {
+  const trialId = document.getElementById("deleteTrialBtn").dataset.trialId;
+  if (trialId) deleteTrial(trialId);
 });
 
 document.getElementById("rangeFilter").addEventListener("change", refreshHistory);
