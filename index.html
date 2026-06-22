@@ -96,6 +96,7 @@
     <select id="trialPicker"><option value="">Choose a trial…</option></select>
     <button id="deleteTrialBtn" style="display:none;">Delete this trial</button>
     <p id="trialDetailProgress" style="margin:10px 0 0; font-size:14px;"></p>
+    <p id="trialDetailStopReason" style="margin:2px 0 0; font-size:13px; color:#E24B4A;"></p>
     <div class="loot-tally" id="trialDetailLootTally"></div>
     <table style="margin-top:12px;">
       <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
@@ -226,6 +227,17 @@ function renderArmChart(runs) {
   });
 }
 
+const STOP_REASON_LABELS = {
+  merc_died: "merc died",
+  user_stopped: "stopped by user (F12)",
+  portal_fail_limit: "too many portal failures",
+};
+
+function stopReasonSuffix(trial) {
+  if (!trial.ended_at || !trial.stop_reason || trial.stop_reason === "completed") return "";
+  return ` (stopped: ${STOP_REASON_LABELS[trial.stop_reason] || trial.stop_reason})`;
+}
+
 function timeAgo(iso) {
   const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
@@ -324,23 +336,33 @@ function renderRunFeed(tbodyId, runs, idPrefix) {
   runs.forEach(r => {
     const loot = (r.loots || []).map(lootItemHtml).join(", ") || "-";
     const detailId = `${idPrefix}${r.id}`;
+    const isPortalFail = r.result === "portal_fail";
 
     const summaryRow = document.createElement("tr");
-    summaryRow.innerHTML =
-      `<td><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
-      `<td>#${r.run_num}</td><td>${r.found_direction || "?"}</td>` +
-      `<td>${r.found_method || "miss"}</td><td>${loot}</td><td>${timeAgo(r.ended_at)}</td>`;
+    if (isPortalFail) {
+      summaryRow.innerHTML =
+        `<td></td><td>#${r.run_num}</td>` +
+        `<td colspan="2" style="color:#888780;">portal not found</td>` +
+        `<td>-</td><td>${timeAgo(r.ended_at)}</td>`;
+    } else {
+      summaryRow.innerHTML =
+        `<td><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
+        `<td>#${r.run_num}</td><td>${r.found_direction || "?"}</td>` +
+        `<td>${r.found_method || "miss"}</td><td>${loot}</td><td>${timeAgo(r.ended_at)}</td>`;
+    }
     tbody.appendChild(summaryRow);
 
-    const detailRow = document.createElement("tr");
-    detailRow.className = "detail-row";
-    detailRow.id = detailId;
-    detailRow.style.display = expanded.has(detailId) ? "" : "none";
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.innerHTML = renderArmDetailHtml(r);
-    detailRow.appendChild(td);
-    tbody.appendChild(detailRow);
+    if (!isPortalFail) {
+      const detailRow = document.createElement("tr");
+      detailRow.className = "detail-row";
+      detailRow.id = detailId;
+      detailRow.style.display = expanded.has(detailId) ? "" : "none";
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.innerHTML = renderArmDetailHtml(r);
+      detailRow.appendChild(td);
+      tbody.appendChild(detailRow);
+    }
   });
 }
 
@@ -381,7 +403,7 @@ async function refreshLive() {
   const isRunning = !trial.ended_at;
   document.getElementById("liveStatusDot").className = "status-dot " + (isRunning ? "green" : "red");
   document.getElementById("liveTrialLabel").textContent =
-    (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id;
+    (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id + stopReasonSuffix(trial);
 
   const runs = await loadRunsForTrial(trial.trial_id);
   renderTrialSummary("liveProgress", runs, trial.max_runs);
@@ -421,6 +443,7 @@ async function populateTrialPicker() {
 function clearTrialDetail() {
   document.getElementById("trialDetailBody").innerHTML = "";
   document.getElementById("trialDetailProgress").textContent = "";
+  document.getElementById("trialDetailStopReason").textContent = "";
   document.getElementById("trialDetailLootTally").innerHTML = "";
   document.getElementById("deleteTrialBtn").style.display = "none";
 }
@@ -434,6 +457,7 @@ async function showTrialDetail(trialId) {
   const trial = trials.find(t => t.trial_id === trialId);
   const runs = await loadRunsForTrial(trialId);
   renderTrialSummary("trialDetailProgress", runs, trial ? trial.max_runs : null);
+  document.getElementById("trialDetailStopReason").textContent = trial ? stopReasonSuffix(trial).trim() : "";
   renderLootTally(runs, "trialDetailLootTally");
   renderRunFeed("trialDetailBody", runs, "histDetail");
   const deleteBtn = document.getElementById("deleteTrialBtn");
