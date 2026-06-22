@@ -419,6 +419,14 @@ sb.channel("summoner_runs_live")
 refreshLive();
 refreshHistory();
 populateTrialPicker();
+
+// Realtime pushes are best-effort: a tab open before a trial starts, a
+// brief websocket drop, or a missed event all mean the page can fall out
+// of sync with no visible sign of it. This periodic poll is a self-healing
+// fallback that doesn't depend on the websocket connection at all — it
+// just re-fetches and re-renders the Live tab every 15s, same as a manual
+// refresh would, so a missed push is corrected automatically within 15s.
+setInterval(refreshLive, 15000);
 </script>
 </body>
 </html>
