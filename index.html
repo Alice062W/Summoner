@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Summoner bot dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -37,6 +38,20 @@
   .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 13px; margin-top: 8px; }
   .legend-grid > div { display: flex; align-items: center; gap: 6px; }
   .legend-grid .status-dot { margin-right: 0; }
+  details.panel summary { font-family: 'Cinzel', serif; cursor: pointer; }
+  @media (max-width: 600px) {
+    body { font-size: 16px; padding: 0 0.75rem; margin: 1rem auto; }
+    .tab-btn { padding: 12px 16px; font-size: 15px; }
+    select, #deleteTrialBtn { min-height: 44px; font-size: 15px; }
+    .expand-btn { min-height: 44px; min-width: 44px; font-size: 18px; }
+    .run-table thead { display: none; }
+    .run-table, .run-table tbody, .run-table tr { display: block; width: 100%; }
+    .run-table tbody tr:not(.detail-row) { border: 1px solid #3a2e1e; border-radius: 8px; margin-bottom: 8px; padding: 6px 8px; background: #1c1610; }
+    .run-table tbody tr.key-row { border-color: #c9a227; }
+    .run-table td { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; border-bottom: none; padding: 4px 0; gap: 4px; }
+    .run-table td[data-label]:not([data-label=""])::before { content: attr(data-label); color: #a8916a; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 8px; }
+    .run-table tr.detail-row td { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -88,7 +103,7 @@
       <div class="loot-tally" id="liveLootTally"></div>
     </div>
     <div class="panel">
-      <table>
+      <table class="run-table">
         <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
         <tbody id="liveFeedBody"></tbody>
       </table>
@@ -119,10 +134,10 @@
     <div class="card"><p>Avg runs / key</p><p id="statRunsPerKey">-</p></div>
   </div>
 
-  <div class="panel">
-    <p><strong>Boss detection success by arm</strong></p>
-    <canvas id="armChart" height="180"></canvas>
-  </div>
+  <details class="panel" id="armChartPanel">
+    <summary><strong>Boss detection success by arm</strong></summary>
+    <canvas id="armChart" height="180" style="margin-top:8px;"></canvas>
+  </details>
 
   <div class="panel">
     <p><strong>Trial detail</strong></p>
@@ -131,7 +146,7 @@
     <p id="trialDetailProgress" style="margin:10px 0 0; font-size:14px;"></p>
     <p id="trialDetailStopReason" style="margin:2px 0 0; font-size:13px; color:#E24B4A;"></p>
     <div class="loot-tally" id="trialDetailLootTally"></div>
-    <table style="margin-top:12px;">
+    <table class="run-table" style="margin-top:12px;">
       <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
       <tbody id="trialDetailBody"></tbody>
     </table>
@@ -406,14 +421,14 @@ function renderRunFeed(tbodyId, runs, idPrefix) {
     if (hasKey) summaryRow.className = "key-row";
     if (isPortalFail) {
       summaryRow.innerHTML =
-        `<td></td><td>#${r.run_num}</td>` +
-        `<td colspan="2" style="color:#888780;" title="portal not found">🌀</td>` +
-        `<td>-</td><td>${timeAgo(r.ended_at)}</td>`;
+        `<td data-label=""></td><td data-label="run">#${r.run_num}</td>` +
+        `<td colspan="2" data-label="result" style="color:#888780;" title="portal not found">🌀</td>` +
+        `<td data-label="loot">-</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     } else {
       summaryRow.innerHTML =
-        `<td><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
-        `<td>#${r.run_num}</td><td>${armIcon(r.found_direction)}</td>` +
-        `<td>${methodIcon(r.found_method)}</td><td>${loot}</td><td>${timeAgo(r.ended_at)}</td>`;
+        `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
+        `<td data-label="run">#${r.run_num}</td><td data-label="arm">${armIcon(r.found_direction)}</td>` +
+        `<td data-label="method">${methodIcon(r.found_method)}</td><td data-label="loot">${loot}</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     }
     tbody.appendChild(summaryRow);
 
@@ -601,6 +616,11 @@ sb.channel("summoner_runs_live")
     populateTrialPicker();
   })
   .subscribe();
+
+document.getElementById("armChartPanel").open = !window.matchMedia("(max-width: 600px)").matches;
+document.getElementById("armChartPanel").addEventListener("toggle", (e) => {
+  if (e.target.open && chart) chart.resize();
+});
 
 refreshLive();
 refreshHistory();
