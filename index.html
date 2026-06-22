@@ -5,31 +5,38 @@
 <title>Summoner bot dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #15110d; color: #d8c9a8; }
+  h2, h3, strong { font-family: 'Cinzel', serif; }
   .tabs { margin-bottom: 1rem; }
-  .tab-btn { padding: 8px 16px; border: 1px solid #ddd; background: #f1efe8; cursor: pointer; font-size: 14px; border-radius: 8px 8px 0 0; margin-right: 4px; }
-  .tab-btn.active { background: #fff; border-bottom: 2px solid #378ADD; font-weight: 500; }
+  .tab-btn { padding: 8px 18px; border: 1px solid #5a4a30; background: #221a12; color: #c9a227; font-family: 'Cinzel', serif; cursor: pointer; font-size: 14px; border-radius: 6px 6px 0 0; margin-right: 4px; }
+  .tab-btn.active { background: #2a2018; border-bottom: 2px solid #c9a227; color: #f0d878; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
-  .card { background: #f1efe8; border-radius: 8px; padding: 1rem; }
-  .card p:first-child { font-size: 13px; color: #5f5e5a; margin: 0 0 6px; }
-  .card p:last-child { font-size: 24px; font-weight: 500; margin: 0; }
-  .panel { border: 1px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+  .card { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 1rem; }
+  .card p:first-child { font-size: 13px; color: #a8916a; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .card p:last-child { font-size: 24px; font-weight: 500; margin: 0; color: #f0d878; }
+  .panel { border: 1px solid #4a3a24; background: #1c1610; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
-  th { color: #5f5e5a; font-weight: 500; }
-  select { margin-right: 8px; }
-  .expand-btn { cursor: pointer; border: none; background: none; font-size: 12px; color: #5f5e5a; padding: 0 4px; }
-  .detail-row td { background: #f9f8f4; font-size: 12px; padding: 10px 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #3a2e1e; color: #d8c9a8; }
+  th { color: #a8916a; font-weight: 500; font-family: 'Cinzel', serif; }
+  select { margin-right: 8px; background: #221a12; color: #d8c9a8; border: 1px solid #4a3a24; border-radius: 4px; padding: 4px; }
+  .expand-btn { cursor: pointer; border: none; background: none; font-size: 12px; color: #a8916a; padding: 0 4px; }
+  .detail-row td { background: #221a12; font-size: 12px; padding: 10px 12px; }
   .detail-row th.arm-cell, .detail-row td.arm-cell { padding: 3px 8px; }
   .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-  .status-dot.green { background: #1D9E75; }
-  .status-dot.red { background: #E24B4A; }
+  .status-dot.green { background: #5a9c4a; box-shadow: 0 0 6px #5a9c4a; }
+  .status-dot.red { background: #9c3a3a; box-shadow: 0 0 6px #9c3a3a; }
   .loot-tally { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .loot-tally span { background: #f1efe8; border-radius: 6px; padding: 3px 10px; font-size: 13px; }
-  .loot-tally span.key-group { background: #FAEEDA; color: #854F0B; font-weight: 700; }
-  .key-item { color: #854F0B; font-weight: 700; }
-  #deleteTrialBtn { color: #E24B4A; border: 1px solid #E24B4A; background: #fff; cursor: pointer; padding: 4px 10px; border-radius: 6px; font-size: 13px; }
+  .loot-tally span { background: #2a2018; border: 1px solid #4a3a24; border-radius: 6px; padding: 3px 10px; font-size: 13px; color: #d8c9a8; }
+  .loot-tally span.key-group { background: #3a2e10; border-color: #c9a227; color: #f0d878; font-weight: 700; }
+  .key-item { color: #f0d878; font-weight: 700; }
+  #deleteTrialBtn { color: #d87878; border: 1px solid #9c3a3a; background: #221212; cursor: pointer; padding: 4px 10px; border-radius: 6px; font-size: 13px; }
+  .key-row { background: linear-gradient(90deg, rgba(201,162,39,0.18), transparent 60%); box-shadow: inset 3px 0 0 #c9a227; }
+  .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 13px; margin-top: 8px; }
+  .legend-grid > div { display: flex; align-items: center; gap: 6px; }
+  .legend-grid .status-dot { margin-right: 0; }
 </style>
 </head>
 <body>
@@ -37,6 +44,32 @@
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnLive" onclick="showTab('live')">Live Trial</button>
   <button class="tab-btn" id="tabBtnHistory" onclick="showTab('history')">History</button>
+  <button class="tab-btn" id="legendToggleBtn" onclick="toggleLegend()" style="float:right;">ⓘ Legend</button>
+</div>
+
+<div id="legendPanel" class="panel" style="display:none;">
+  <p><strong>Icon legend</strong></p>
+  <div class="legend-grid">
+    <div><span class="status-dot green"></span> Trial running</div>
+    <div><span class="status-dot red"></span> Trial stopped</div>
+    <div>🎯 Found via base</div>
+    <div>📍 Found via pillar</div>
+    <div>❌ Boss not found (all arms missed)</div>
+    <div>🌀 Portal/waypoint not found</div>
+    <div>↗️↖️↘️↙️ Arm direction (NE/NW/SE/SW)</div>
+    <div>❓ Arm not determined</div>
+    <div>🔑 Key</div>
+    <div>💰 Gold</div>
+    <div>💎 Gems</div>
+    <div>🪨 Runes</div>
+    <div>💠 Jewels</div>
+    <div>🍀 Charms</div>
+    <div>💍 Rings</div>
+    <div>📿 Amulets</div>
+    <div>👢 Unique boots</div>
+    <div>✨ Worldstone shards</div>
+    <div>📦 Other loot</div>
+  </div>
 </div>
 
 <div id="liveTabPanel">
@@ -133,11 +166,40 @@ const LOOT_ICONS = {
   "Rings": "💍", "Amulets": "📿", "Uniq. Boots": "👢", "W. Shards": "✨",
 };
 
+const METHOD_ICONS = { base: "🎯", pillar: "📍", miss: "❌" };
+const ARM_ICONS = { NE: "↗️", NW: "↖️", SE: "↘️", SW: "↙️" };
+
+function methodIcon(method) {
+  return `<span title="${method || "miss"}">${METHOD_ICONS[method] || METHOD_ICONS.miss}</span>`;
+}
+
+function armIcon(direction) {
+  if (!direction || !ARM_ICONS[direction]) return `<span title="not found">❓</span>`;
+  return `<span title="${direction}">${ARM_ICONS[direction]}</span>`;
+}
+
+function lootRowIcon(l) {
+  if (l.is_key) return `<span title="${l.label}">🔑</span>`;
+  const key = l.key || l.label;
+  if (key === "loot_gold") return `<span title="${l.label}">💰</span>`;
+  for (const [group, keys] of LOOT_GROUPS) {
+    if (keys.includes(key)) return `<span title="${l.label}">${LOOT_ICONS[group]}</span>`;
+  }
+  return `<span title="${l.label}">📦</span>`;
+}
+
 function showTab(name) {
   document.getElementById("liveTabPanel").style.display = name === "live" ? "" : "none";
   document.getElementById("historyTabPanel").style.display = name === "history" ? "" : "none";
   document.getElementById("tabBtnLive").classList.toggle("active", name === "live");
   document.getElementById("tabBtnHistory").classList.toggle("active", name === "history");
+}
+
+function toggleLegend() {
+  const panel = document.getElementById("legendPanel");
+  const isOpen = panel.style.display !== "none";
+  panel.style.display = isOpen ? "none" : "";
+  document.getElementById("legendToggleBtn").classList.toggle("active", !isOpen);
 }
 
 function hourBucket(hour) {
@@ -334,21 +396,24 @@ function renderRunFeed(tbodyId, runs, idPrefix) {
   );
   tbody.innerHTML = "";
   runs.forEach(r => {
-    const loot = (r.loots || []).map(lootItemHtml).join(", ") || "-";
+    const loot = (r.loots || []).map(l => lootRowIcon(l)).join(" ") || "-";
     const detailId = `${idPrefix}${r.id}`;
     const isPortalFail = r.result === "portal_fail";
 
+    const hasKey = (r.loots || []).some(l => l.is_key);
+
     const summaryRow = document.createElement("tr");
+    if (hasKey) summaryRow.className = "key-row";
     if (isPortalFail) {
       summaryRow.innerHTML =
         `<td></td><td>#${r.run_num}</td>` +
-        `<td colspan="2" style="color:#888780;">portal not found</td>` +
+        `<td colspan="2" style="color:#888780;" title="portal not found">🌀</td>` +
         `<td>-</td><td>${timeAgo(r.ended_at)}</td>`;
     } else {
       summaryRow.innerHTML =
         `<td><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
-        `<td>#${r.run_num}</td><td>${r.found_direction || "?"}</td>` +
-        `<td>${r.found_method || "miss"}</td><td>${loot}</td><td>${timeAgo(r.ended_at)}</td>`;
+        `<td>#${r.run_num}</td><td>${armIcon(r.found_direction)}</td>` +
+        `<td>${methodIcon(r.found_method)}</td><td>${loot}</td><td>${timeAgo(r.ended_at)}</td>`;
     }
     tbody.appendChild(summaryRow);
 
