@@ -7,6 +7,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
   body { font-family: sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  .tabs { margin-bottom: 1rem; }
+  .tab-btn { padding: 8px 16px; border: 1px solid #ddd; background: #f1efe8; cursor: pointer; font-size: 14px; border-radius: 8px 8px 0 0; margin-right: 4px; }
+  .tab-btn.active { background: #fff; border-bottom: 2px solid #378ADD; font-weight: 500; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
   .card { background: #f1efe8; border-radius: 8px; padding: 1rem; }
   .card p:first-child { font-size: 13px; color: #5f5e5a; margin: 0 0 6px; }
@@ -16,50 +19,76 @@
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
   th { color: #5f5e5a; font-weight: 500; }
   select { margin-right: 8px; }
+  .expand-btn { cursor: pointer; border: none; background: none; font-size: 12px; color: #5f5e5a; padding: 0 4px; }
+  .detail-row td { background: #f9f8f4; font-size: 12px; padding: 10px 12px; }
+  .detail-row th.arm-cell, .detail-row td.arm-cell { padding: 3px 8px; }
 </style>
 </head>
 <body>
 
-<div>
-  <select id="rangeFilter">
-    <option value="7">Last 7 days</option>
-    <option value="30">Last 30 days</option>
-    <option value="0">All time</option>
-  </select>
-  <select id="hourFilter">
-    <option value="all">All hours</option>
-    <option value="morning">Morning (6-12)</option>
-    <option value="afternoon">Afternoon (12-18)</option>
-    <option value="evening">Evening (18-24)</option>
-    <option value="night">Night (0-6)</option>
-  </select>
-  <span id="liveStatus" style="float:right; font-size:13px; color:#5f5e5a;"></span>
+<div class="tabs">
+  <button class="tab-btn active" id="tabBtnLive" onclick="showTab('live')">Live Trial</button>
+  <button class="tab-btn" id="tabBtnHistory" onclick="showTab('history')">History</button>
 </div>
 
-<div class="cards">
-  <div class="card"><p>Total runs</p><p id="statRuns">-</p></div>
-  <div class="card"><p>Total trials</p><p id="statTrials">-</p></div>
-  <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
-  <div class="card"><p>Avg runs / key</p><p id="statRunsPerKey">-</p></div>
+<div id="liveTabPanel">
+  <div id="liveIdle" class="panel" style="display:none;">
+    <p style="color:#5f5e5a; text-align:center; margin:0; padding:2rem 0;">Idle — no trial running</p>
+  </div>
+  <div id="liveContent">
+    <div>
+      <span id="liveTrialLabel" style="font-size:13px; color:#5f5e5a;"></span>
+      <span id="liveStatus" style="float:right; font-size:13px; color:#5f5e5a;"></span>
+    </div>
+    <div class="panel">
+      <table>
+        <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
+        <tbody id="liveFeedBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
-<div class="panel">
-  <p><strong>Boss detection success by arm</strong></p>
-  <canvas id="armChart" height="180"></canvas>
-</div>
+<div id="historyTabPanel" style="display:none;">
+  <div>
+    <select id="rangeFilter">
+      <option value="7">Last 7 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="0">All time</option>
+    </select>
+    <select id="hourFilter">
+      <option value="all">All hours</option>
+      <option value="morning">Morning (6-12)</option>
+      <option value="afternoon">Afternoon (12-18)</option>
+      <option value="evening">Evening (18-24)</option>
+      <option value="night">Night (0-6)</option>
+    </select>
+  </div>
 
-<div class="panel">
-  <p><strong>Live run feed</strong></p>
-  <table>
-    <thead><tr><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
-    <tbody id="feedBody"></tbody>
-  </table>
+  <div class="cards">
+    <div class="card"><p>Total runs</p><p id="statRuns">-</p></div>
+    <div class="card"><p>Total trials</p><p id="statTrials">-</p></div>
+    <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
+    <div class="card"><p>Avg runs / key</p><p id="statRunsPerKey">-</p></div>
+  </div>
+
+  <div class="panel">
+    <p><strong>Boss detection success by arm</strong></p>
+    <canvas id="armChart" height="180"></canvas>
+  </div>
 </div>
 
 <script>
 const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function showTab(name) {
+  document.getElementById("liveTabPanel").style.display = name === "live" ? "" : "none";
+  document.getElementById("historyTabPanel").style.display = name === "history" ? "" : "none";
+  document.getElementById("tabBtnLive").classList.toggle("active", name === "live");
+  document.getElementById("tabBtnHistory").classList.toggle("active", name === "history");
+}
 
 function hourBucket(hour) {
   if (hour >= 6 && hour < 12) return "morning";
@@ -84,10 +113,7 @@ async function loadRuns() {
     .gte("started_at", rangeStartIso(days))
     .order("started_at", { ascending: false })
     .limit(2000);
-  if (error) {
-    document.getElementById("liveStatus").textContent = "data unavailable";
-    return [];
-  }
+  if (error) return [];
   if (hourSel === "all") return data;
   return data.filter(r => hourBucket(new Date(r.started_at).getHours()) === hourSel);
 }
@@ -154,36 +180,138 @@ function timeAgo(iso) {
   return `${Math.round(seconds / 3600)}h ago`;
 }
 
-function renderFeed(runs) {
-  const tbody = document.getElementById("feedBody");
+async function loadActiveTrial() {
+  const { data, error } = await sb
+    .from("summoner_trials")
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  return data[0].ended_at ? null : data[0];
+}
+
+async function loadLiveFeed(trialId) {
+  const { data, error } = await sb
+    .from("summoner_runs")
+    .select("*")
+    .eq("trial_id", trialId)
+    .order("started_at", { ascending: false });
+  if (error) return [];
+  return data;
+}
+
+function fmtScore(v) {
+  return (v === null || v === undefined) ? "n/a" : v.toFixed(3);
+}
+
+function renderArmDetailHtml(run) {
+  const arms = ["NE", "NW", "SE", "SW"];
+  const detail = run.arm_detail || {};
+  let rows = arms.filter(a => detail[a]).map(a => {
+    const d = detail[a];
+    const isWinner = run.found_direction === a;
+    const baseOk = d.base_score !== undefined && d.base_score !== null && d.base_score >= run.base_thresh;
+    const pillarOk = d.pillar_score !== undefined && d.pillar_score !== null && d.pillar_score >= run.pillar_thresh;
+    const baseTxt = fmtScore(d.base_score) + (baseOk ? " ✓" : "");
+    const pillarTxt = fmtScore(d.pillar_score) + (pillarOk ? " ✓" : "");
+    return `<tr${isWinner ? ' style="font-weight:500;"' : ""}><td class="arm-cell">${a}</td><td class="arm-cell">${baseTxt}</td><td class="arm-cell">${pillarTxt}</td></tr>`;
+  }).join("");
+  if (!rows) rows = '<tr><td colspan="3">no arm data</td></tr>';
+
+  const lootRows = (run.loots || []).map(l =>
+    `<li>${l.label}${(l.score !== undefined && l.score !== null) ? ` — ${l.score.toFixed(3)} (> ${l.threshold !== undefined && l.threshold !== null ? l.threshold.toFixed(2) : "?"})` : ""}</li>`
+  ).join("") || "<li>(none)</li>";
+
+  return `
+    <div>
+      <strong>Arm scores</strong> (thresh: b≥${run.base_thresh ?? "?"} / p≥${run.pillar_thresh ?? "?"})
+      <table><thead><tr><th class="arm-cell">arm</th><th class="arm-cell">base</th><th class="arm-cell">pillar</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:8px;">
+      <strong>Stash:</strong> ${run.stash_result ?? "n/a"}
+      &nbsp;&nbsp;<strong>Portal fail:</strong> ${run.portal_fail ? "yes" : "no"}
+      &nbsp;&nbsp;<strong>Merc died:</strong> ${run.merc_died ? "yes" : "no"}
+    </div>
+    <div style="margin-top:8px;">
+      <strong>Loot:</strong>
+      <ul style="margin:4px 0 0 18px; padding:0;">${lootRows}</ul>
+    </div>
+  `;
+}
+
+function toggleDetail(rowId) {
+  const row = document.getElementById(rowId);
+  row.style.display = row.style.display === "none" ? "" : "none";
+}
+
+function renderLiveFeed(runs) {
+  const tbody = document.getElementById("liveFeedBody");
+  // Remember which detail rows are currently expanded so a realtime refresh
+  // (which rebuilds the whole tbody) doesn't yank a row closed mid-read.
+  const expanded = new Set(
+    [...tbody.querySelectorAll(".detail-row")]
+      .filter(row => row.style.display !== "none")
+      .map(row => row.id)
+  );
   tbody.innerHTML = "";
-  runs.slice(0, 30).forEach(r => {
+  runs.forEach(r => {
     const loot = (r.loots || []).map(l => l.label).join(", ") || "-";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>#${r.run_num}</td><td>${r.found_direction || "?"}</td>` +
+    const detailId = `liveDetail${r.id}`;
+
+    const summaryRow = document.createElement("tr");
+    summaryRow.innerHTML =
+      `<td><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
+      `<td>#${r.run_num}</td><td>${r.found_direction || "?"}</td>` +
       `<td>${r.found_method || "miss"}</td><td>${loot}</td><td>${timeAgo(r.ended_at)}</td>`;
-    tbody.appendChild(tr);
+    tbody.appendChild(summaryRow);
+
+    const detailRow = document.createElement("tr");
+    detailRow.className = "detail-row";
+    detailRow.id = detailId;
+    detailRow.style.display = expanded.has(detailId) ? "" : "none";
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.innerHTML = renderArmDetailHtml(r);
+    detailRow.appendChild(td);
+    tbody.appendChild(detailRow);
   });
 }
 
-async function refresh() {
+async function refreshLive() {
+  const trial = await loadActiveTrial();
+  if (!trial) {
+    document.getElementById("liveIdle").style.display = "";
+    document.getElementById("liveContent").style.display = "none";
+    return;
+  }
+  document.getElementById("liveIdle").style.display = "none";
+  document.getElementById("liveContent").style.display = "";
+  document.getElementById("liveTrialLabel").textContent = "Trial " + trial.trial_id;
+  const runs = await loadLiveFeed(trial.trial_id);
+  renderLiveFeed(runs);
+}
+
+async function refreshHistory() {
   const [runs, trialCount] = await Promise.all([loadRuns(), loadTrialCount()]);
   renderStats(runs, trialCount);
   renderArmChart(runs);
-  renderFeed(runs);
 }
 
-document.getElementById("rangeFilter").addEventListener("change", refresh);
-document.getElementById("hourFilter").addEventListener("change", refresh);
+document.getElementById("rangeFilter").addEventListener("change", refreshHistory);
+document.getElementById("hourFilter").addEventListener("change", refreshHistory);
 
 sb.channel("summoner_runs_live")
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "summoner_runs" }, () => {
     document.getElementById("liveStatus").textContent = "live - updated " + new Date().toLocaleTimeString();
-    refresh();
+    refreshLive();
+    refreshHistory();
   })
   .subscribe();
 
-refresh();
+refreshLive();
+refreshHistory();
 </script>
 </body>
 </html>
