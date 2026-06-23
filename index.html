@@ -39,6 +39,12 @@
   .legend-grid > div { display: flex; align-items: center; gap: 6px; }
   .legend-grid .status-dot { margin-right: 0; }
   details.panel summary { font-family: 'Cinzel', serif; cursor: pointer; }
+  .key-counts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  .key-count-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 10px; text-align: center; }
+  .key-count-box p:first-child { font-size: 12px; color: #a8916a; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .key-count-box p:last-child { font-size: 28px; font-weight: 700; margin: 0; color: #f0d878; }
+  .key-count-box.hate { background: linear-gradient(160deg, #3a2410, #1c1610); border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.45), inset 0 0 14px rgba(201,162,39,0.15); }
+  .key-count-box.hate p:last-child { color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.6); }
   @media (max-width: 600px) {
     body { font-size: 16px; padding: 0 0.75rem; margin: 1rem auto; }
     .tab-btn { padding: 12px 16px; font-size: 15px; }
@@ -63,11 +69,15 @@
 </div>
 
 <div id="keyCountsPanel" class="panel">
-  <strong>🗝️ Stash Keys</strong>
-  <span style="margin-left:12px;">Terror: <strong id="keyTerror">-</strong></span>
-  <span style="margin-left:12px;">Hate: <strong id="keyHate">-</strong></span>
-  <span style="margin-left:12px;">Destruction: <strong id="keyDestruction">-</strong></span>
-  <button id="editKeysBtn" style="float:right; cursor:pointer; border:1px solid #4a3a24; background:#221a12; color:#c9a227; padding:4px 10px; border-radius:6px; font-size:13px;">✏️ Edit</button>
+  <div style="display:flex; align-items:center; justify-content:space-between;">
+    <strong>🗝️ Stash Keys</strong>
+    <button id="editKeysBtn" style="cursor:pointer; border:1px solid #4a3a24; background:#221a12; color:#c9a227; padding:4px 10px; border-radius:6px; font-size:13px;">✏️ Edit</button>
+  </div>
+  <div class="key-counts-grid">
+    <div class="key-count-box"><p>👹 Terror</p><p id="keyTerror">-</p></div>
+    <div class="key-count-box hate"><p>🔥 Hate</p><p id="keyHate">-</p></div>
+    <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
+  </div>
 </div>
 
 <div id="legendPanel" class="panel" style="display:none;">
@@ -81,6 +91,8 @@
     <div>🌀 Portal/waypoint not found</div>
     <div>↗️↖️↘️↙️ Arm direction (NE/NW/SE/SW)</div>
     <div>❓ Arm not determined</div>
+    <div>✅ Success ratio (live stats)</div>
+    <div>📥 Stash deposit success ratio (live stats)</div>
     <div>🔑 Key</div>
     <div>💰 Gold</div>
     <div>💎 Gems</div>
@@ -92,6 +104,9 @@
     <div>👢 Unique boots</div>
     <div>✨ Worldstone shards</div>
     <div>📦 Other loot</div>
+    <div>👹 Key of Terror (stash)</div>
+    <div>🔥 Key of Hate (stash, bot-tracked)</div>
+    <div>💀 Key of Destruction (stash)</div>
   </div>
 </div>
 
@@ -123,8 +138,12 @@
 <div id="historyTabPanel" style="display:none;">
   <div>
     <select id="rangeFilter">
-      <option value="7">Last 7 days</option>
-      <option value="30">Last 30 days</option>
+      <option value="12">Last 12 hours</option>
+      <option value="24">Last 1 day</option>
+      <option value="72">Last 3 days</option>
+      <option value="168" selected>Last 7 days</option>
+      <option value="336">Last 2 weeks</option>
+      <option value="720">Last month</option>
       <option value="0">All time</option>
     </select>
     <select id="hourFilter">
@@ -144,13 +163,19 @@
   </div>
 
   <details class="panel" id="armChartPanel">
-    <summary><strong>Boss detection success by arm</strong></summary>
-    <canvas id="armChart" height="180" style="margin-top:8px;"></canvas>
+    <summary><strong>Boss arm distribution (found runs only)</strong></summary>
+    <canvas id="armChart" height="220" style="margin-top:8px;"></canvas>
   </details>
 
-  <details class="panel" id="dailyLootChartPanel">
-    <summary><strong>Daily loot by category</strong></summary>
-    <canvas id="dailyLootChart" height="220" style="margin-top:8px;"></canvas>
+  <details class="panel" id="lootLineChartPanel">
+    <summary><strong>Loots by category</strong></summary>
+    <select id="lootGranularity" style="margin-top:8px;">
+      <option value="hour">By hour</option>
+      <option value="day" selected>By day</option>
+      <option value="week">By week</option>
+    </select>
+    <p style="margin:6px 0 0; font-size:12px; color:#a8916a;">Click a legend entry to show/hide that loot type — only Keys is shown by default.</p>
+    <canvas id="lootLineChart" height="220" style="margin-top:8px;"></canvas>
   </details>
 
   <details class="panel" id="durationChartPanel">
@@ -249,20 +274,18 @@ function hourBucket(hour) {
   return "night";
 }
 
-function rangeStartIso(days) {
-  if (days === 0) return "1970-01-01T00:00:00Z";
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString();
+function rangeStartIso(hours) {
+  if (hours === 0) return "1970-01-01T00:00:00Z";
+  return new Date(Date.now() - hours * 3600 * 1000).toISOString();
 }
 
 async function loadRuns() {
-  const days = parseInt(document.getElementById("rangeFilter").value, 10);
+  const hours = parseInt(document.getElementById("rangeFilter").value, 10);
   const hourSel = document.getElementById("hourFilter").value;
   const { data, error } = await sb
     .from("summoner_runs")
     .select("*")
-    .gte("started_at", rangeStartIso(days))
+    .gte("started_at", rangeStartIso(hours))
     .order("started_at", { ascending: false })
     .limit(2000);
   if (error) return [];
@@ -357,32 +380,35 @@ function renderStats(runs, trialCount) {
   document.getElementById("statRunsPerKey").textContent = avgRunsPerKeyLabel(runs);
 }
 
+// Pie chart of which arm the boss was actually found at, among runs where
+// the boss WAS found — runs is already filtered by the range/hour dropdowns
+// (see loadRuns), so this recomputes automatically whenever those change.
 let chart = null;
 function renderArmChart(runs) {
   const arms = ["NE", "NW", "SE", "SW"];
-  const counts = arms.map(arm => {
-    const armRuns = runs.filter(r => Object.keys(r.arm_detail || {}).includes(arm));
-    const total = armRuns.length || 1;
-    const base = armRuns.filter(r => r.found_direction === arm && r.found_method === "base").length;
-    const pillar = armRuns.filter(r => r.found_direction === arm && r.found_method === "pillar").length;
-    const missed = total - base - pillar;
-    return { base: 100 * base / total, pillar: 100 * pillar / total, missed: 100 * missed / total };
-  });
+  const foundRuns = runs.filter(r => r.result === "found" && r.found_direction);
+  const counts = arms.map(arm => foundRuns.filter(r => r.found_direction === arm).length);
+  const total = counts.reduce((a, b) => a + b, 0);
   const ctx = document.getElementById("armChart");
   if (chart) chart.destroy();
   chart = new Chart(ctx, {
-    type: "bar",
+    type: "pie",
     data: {
-      labels: arms,
-      datasets: [
-        { label: "base", data: counts.map(c => c.base), backgroundColor: "#1D9E75", stack: "s" },
-        { label: "pillar", data: counts.map(c => c.pillar), backgroundColor: "#378ADD", stack: "s" },
-        { label: "missed", data: counts.map(c => c.missed), backgroundColor: "#888780", stack: "s" },
-      ],
+      labels: arms.map(a => `${ARM_ICONS[a]} ${a}`),
+      datasets: [{
+        data: counts,
+        backgroundColor: ["#1D9E75", "#378ADD", "#E0A23C", "#D87878"],
+      }],
     },
     options: {
       responsive: true,
-      scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + "%" } } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${ctx.parsed} (${pct(ctx.parsed, total)}%)`,
+          },
+        },
+      },
     },
   });
 }
@@ -392,74 +418,138 @@ function dayKey(iso) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-let dailyLootChart = null;
-function renderDailyLootChart(runs) {
-  const byDay = new Map();
+function hourKey(iso) {
+  const d = new Date(iso);
+  return `${dayKey(iso)} ${String(d.getHours()).padStart(2, "0")}:00`;
+}
+
+function weekKey(iso) {
+  // Monday-start week, computed from local Y/M/D components (not a UTC
+  // round-trip through toISOString) so this can't shift to the wrong day
+  // near midnight in timezones behind/ahead of UTC.
+  const d = new Date(iso);
+  const day = d.getDay(); // 0 = Sunday
+  const diffToMonday = (day === 0 ? -6 : 1) - day;
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday);
+  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+}
+
+const BUCKET_KEY_FNS = { hour: hourKey, day: dayKey, week: weekKey };
+
+// Distinct dash pattern + point style per loot group, on top of distinct
+// color, so categories stay distinguishable even for colorblind viewers or
+// when printed in grayscale.
+const LOOT_DASH = {
+  "Runes": [], "Keys": [], "Gems": [6, 3], "Jewels": [2, 2], "Charms": [8, 4],
+  "Rings": [4, 2, 2, 2], "Amulets": [10, 4], "Uniq. Boots": [1, 3], "W. Shards": [12, 3],
+};
+const LOOT_POINT_STYLES = {
+  "Runes": "circle", "Keys": "rectRot", "Gems": "triangle", "Jewels": "rect",
+  "Charms": "star", "Rings": "cross", "Amulets": "rectRounded", "Uniq. Boots": "crossRot", "W. Shards": "circle",
+};
+
+let lootLineChart = null;
+function renderLootLineChart(runs) {
+  const granularity = document.getElementById("lootGranularity").value;
+  const keyFn = BUCKET_KEY_FNS[granularity];
+  const byBucket = new Map();
   runs.forEach(r => {
-    const day = dayKey(r.started_at);
-    if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day).push(r);
+    const b = keyFn(r.started_at);
+    if (!byBucket.has(b)) byBucket.set(b, []);
+    byBucket.get(b).push(r);
   });
-  const days = [...byDay.keys()].sort();
+  const buckets = [...byBucket.keys()].sort();
   const datasets = LOOT_GROUPS.map(([group, keys]) => ({
     label: `${LOOT_ICONS[group]} ${group}`,
-    backgroundColor: LOOT_COLORS[group] || "#888780",
-    stack: "d",
-    data: days.map(day => {
-      const dayRuns = byDay.get(day);
-      const allKeys = dayRuns.flatMap(r => (r.loots || []).map(l => l.key || l.label));
+    data: buckets.map(b => {
+      const bucketRuns = byBucket.get(b);
+      const allKeys = bucketRuns.flatMap(r => (r.loots || []).map(l => l.key || l.label));
       return allKeys.filter(k => keys.includes(k)).length;
     }),
+    borderColor: LOOT_COLORS[group] || "#888780",
+    backgroundColor: LOOT_COLORS[group] || "#888780",
+    borderDash: LOOT_DASH[group] || [],
+    pointStyle: LOOT_POINT_STYLES[group] || "circle",
+    tension: 0.25,
+    // Only Keys is visible by default — clicking other legend entries
+    // toggles them on, same as Chart.js's built-in legend click behavior.
+    hidden: group !== "Keys",
   }));
-  const ctx = document.getElementById("dailyLootChart");
-  if (dailyLootChart) dailyLootChart.destroy();
-  dailyLootChart = new Chart(ctx, {
-    type: "bar",
-    data: { labels: days, datasets },
+  const ctx = document.getElementById("lootLineChart");
+  if (lootLineChart) lootLineChart.destroy();
+  lootLineChart = new Chart(ctx, {
+    type: "line",
+    data: { labels: buckets, datasets },
     options: {
       responsive: true,
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
     },
   });
 }
 
-// 1-minute buckets chosen from observed run durations (roughly 1-6 minutes
-// for this build); "6m+" catches outliers without needing unbounded labels.
-const DURATION_BUCKETS = ["0-1m", "1-2m", "2-3m", "3-4m", "4-5m", "5-6m", "6m+"];
-function durationBucketLabel(seconds) {
-  const m = Math.floor(seconds / 60);
-  return m >= 6 ? "6m+" : `${m}-${m + 1}m`;
+// Gaussian kernel density estimate — a smooth, continuous approximation of
+// the underlying duration distribution, sampled at the xs points given.
+function gaussianKDE(values, bandwidth, xs) {
+  const n = values.length;
+  return xs.map(x => {
+    let sum = 0;
+    for (const v of values) {
+      const u = (x - v) / bandwidth;
+      sum += Math.exp(-0.5 * u * u);
+    }
+    return sum / (n * bandwidth * Math.sqrt(2 * Math.PI));
+  });
 }
 
 let durationChart = null;
 function renderDurationChart(runs) {
-  const counts = Object.fromEntries(DURATION_BUCKETS.map(b => [b, 0]));
-  runs.forEach(r => {
-    const seconds = (new Date(r.ended_at) - new Date(r.started_at)) / 1000;
-    counts[durationBucketLabel(seconds)]++;
-  });
-  const total = runs.length || 1;
+  const durations = runs
+    .map(r => (new Date(r.ended_at) - new Date(r.started_at)) / 1000)
+    .filter(s => Number.isFinite(s) && s >= 0);
   const ctx = document.getElementById("durationChart");
-  if (durationChart) durationChart.destroy();
+  if (durationChart) { durationChart.destroy(); durationChart = null; }
+  if (durations.length === 0) return;
+
+  // 10-second bins — much finer than the previous 1-minute buckets — plus a
+  // Gaussian KDE overlay (bandwidth via Silverman's rule of thumb) so the
+  // shape of the distribution reads as a smooth curve rather than just bars.
+  const binWidth = 10;
+  const minD = Math.max(0, Math.min(...durations) - binWidth);
+  const maxD = Math.max(...durations) + binWidth;
+  const binCount = Math.max(1, Math.ceil((maxD - minD) / binWidth));
+  const binStarts = Array.from({ length: binCount }, (_, i) => minD + i * binWidth);
+  const binCounts = new Array(binCount).fill(0);
+  durations.forEach(d => {
+    const idx = Math.min(binCount - 1, Math.floor((d - minD) / binWidth));
+    binCounts[idx]++;
+  });
+  const total = durations.length;
+  const binPct = binCounts.map(c => 100 * c / total);
+
+  const mean = durations.reduce((a, b) => a + b, 0) / total;
+  const variance = durations.reduce((a, b) => a + (b - mean) ** 2, 0) / total;
+  const std = Math.sqrt(variance) || 1;
+  const bandwidth = Math.max(5, 1.06 * std * Math.pow(total, -0.2)); // Silverman's rule
+  const xs = binStarts.map(s => s + binWidth / 2);
+  const density = gaussianKDE(durations, bandwidth, xs);
+  // Scale density (probability per second) to "% of runs per bin" so the
+  // curve is visually comparable to the bar heights, which are also %.
+  const curvePct = density.map(d => d * binWidth * 100);
+
+  const labels = binStarts.map(s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
   durationChart = new Chart(ctx, {
-    type: "bar",
     data: {
-      labels: DURATION_BUCKETS,
-      datasets: [{
-        label: "% of runs",
-        data: DURATION_BUCKETS.map(b => 100 * counts[b] / total),
-        backgroundColor: "#378ADD",
-      }],
+      labels,
+      datasets: [
+        { type: "bar", label: "% of runs", data: binPct, backgroundColor: "rgba(55,138,221,0.55)", order: 2 },
+        { type: "line", label: "smoothed distribution", data: curvePct, borderColor: "#f0d878", backgroundColor: "transparent", pointRadius: 0, tension: 0.35, order: 1 },
+      ],
     },
     options: {
       responsive: true,
-      scales: { y: { beginAtZero: true, ticks: { callback: v => v + "%" } } },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${counts[ctx.label]} run(s) (${ctx.formattedValue}%)`,
-          },
-        },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => v + "%" } },
+        x: { title: { display: true, text: "run duration (m:ss)" } },
       },
     },
   });
@@ -649,10 +739,10 @@ function renderRatioStats(elId, runs) {
   const stashFail = runs.filter(r => r.stash_result === "fail").length;
   const stashTotal = stashSuccess + stashFail;
   document.getElementById(elId).textContent = total === 0 ? "" :
-    `✅ Success ${success}/${total} (${pct(success, total)}%) · ` +
-    `❌ Boss not found ${bossMiss}/${total} (${pct(bossMiss, total)}%) · ` +
-    `🌀 Portal not found ${portalFail}/${total} (${pct(portalFail, total)}%) · ` +
-    `📦 Stash ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%)`;
+    `✅ ${success}/${total} (${pct(success, total)}%) · ` +
+    `❌ ${bossMiss}/${total} (${pct(bossMiss, total)}%) · ` +
+    `🌀 ${portalFail}/${total} (${pct(portalFail, total)}%) · ` +
+    `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%)`;
 }
 
 async function refreshLive() {
@@ -685,11 +775,13 @@ async function refreshLive() {
   renderRunFeed("liveFeedBody", runs, "liveDetail");
 }
 
+let _lastHistoryRuns = [];
 async function refreshHistory() {
   const [runs, trialCount] = await Promise.all([loadRuns(), loadTrialCount()]);
+  _lastHistoryRuns = runs;
   renderStats(runs, trialCount);
   renderArmChart(runs);
-  renderDailyLootChart(runs);
+  renderLootLineChart(runs);
   renderDurationChart(runs);
 }
 
@@ -792,6 +884,7 @@ document.getElementById("deleteTrialBtn").addEventListener("click", () => {
 
 document.getElementById("rangeFilter").addEventListener("change", refreshHistory);
 document.getElementById("hourFilter").addEventListener("change", refreshHistory);
+document.getElementById("lootGranularity").addEventListener("change", () => renderLootLineChart(_lastHistoryRuns));
 
 sb.channel("summoner_runs_live")
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "summoner_runs" }, () => {
@@ -821,7 +914,7 @@ function setupCollapsibleChartPanel(panelId, getChart) {
   });
 }
 setupCollapsibleChartPanel("armChartPanel", () => chart);
-setupCollapsibleChartPanel("dailyLootChartPanel", () => dailyLootChart);
+setupCollapsibleChartPanel("lootLineChartPanel", () => lootLineChart);
 setupCollapsibleChartPanel("durationChartPanel", () => durationChart);
 
 refreshLive();
