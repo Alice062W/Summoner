@@ -62,6 +62,14 @@
   <button class="tab-btn" id="legendToggleBtn" onclick="toggleLegend()" style="float:right;">ⓘ Legend</button>
 </div>
 
+<div id="keyCountsPanel" class="panel">
+  <strong>🗝️ Stash Keys</strong>
+  <span style="margin-left:12px;">Terror: <strong id="keyTerror">-</strong></span>
+  <span style="margin-left:12px;">Hate: <strong id="keyHate">-</strong></span>
+  <span style="margin-left:12px;">Destruction: <strong id="keyDestruction">-</strong></span>
+  <button id="editKeysBtn" style="float:right; cursor:pointer; border:1px solid #4a3a24; background:#221a12; color:#c9a227; padding:4px 10px; border-radius:6px; font-size:13px;">✏️ Edit</button>
+</div>
+
 <div id="legendPanel" class="panel" style="display:none;">
   <p><strong>Icon legend</strong></p>
   <div class="legend-grid">
@@ -100,6 +108,7 @@
       </div>
       <p id="liveProgress" style="margin:10px 0 0; font-size:14px;"></p>
       <p id="liveInProgress" style="margin:4px 0 0; font-size:13px; color:#378ADD;"></p>
+      <p id="liveRatios" style="margin:6px 0 0; font-size:13px; color:#a8916a;"></p>
       <div class="loot-tally" id="liveLootTally"></div>
     </div>
     <div class="panel">
@@ -137,6 +146,16 @@
   <details class="panel" id="armChartPanel">
     <summary><strong>Boss detection success by arm</strong></summary>
     <canvas id="armChart" height="180" style="margin-top:8px;"></canvas>
+  </details>
+
+  <details class="panel" id="dailyLootChartPanel">
+    <summary><strong>Daily loot by category</strong></summary>
+    <canvas id="dailyLootChart" height="220" style="margin-top:8px;"></canvas>
+  </details>
+
+  <details class="panel" id="durationChartPanel">
+    <summary><strong>Run duration distribution</strong></summary>
+    <canvas id="durationChart" height="180" style="margin-top:8px;"></canvas>
   </details>
 
   <div class="panel">
@@ -179,6 +198,12 @@ const LOOT_GROUPS = [
 const LOOT_ICONS = {
   "Runes": "🪨", "Keys": "🔑", "Gems": "💎", "Jewels": "💠", "Charms": "🍀",
   "Rings": "💍", "Amulets": "📿", "Uniq. Boots": "👢", "W. Shards": "✨",
+};
+
+const LOOT_COLORS = {
+  "Runes": "#a8916a", "Keys": "#c9a227", "Gems": "#378ADD", "Jewels": "#9C5FD8",
+  "Charms": "#1D9E75", "Rings": "#D87878", "Amulets": "#E0A23C", "Uniq. Boots": "#5a9c4a",
+  "W. Shards": "#5fc7d8",
 };
 
 const METHOD_ICONS = { base: "🎯", pillar: "📍", miss: "❌" };
@@ -245,6 +270,64 @@ async function loadRuns() {
   return data.filter(r => hourBucket(new Date(r.started_at).getHours()) === hourSel);
 }
 
+async function loadKeyCounts() {
+  const { data, error } = await sb.from("key_counts").select("*").eq("id", 1).limit(1);
+  if (error || !data || data.length === 0) return { terror: 0, hate: 0, destruction: 0 };
+  return data[0];
+}
+
+function renderKeyCounts(counts) {
+  document.getElementById("keyTerror").textContent = counts.terror;
+  document.getElementById("keyHate").textContent = counts.hate;
+  document.getElementById("keyDestruction").textContent = counts.destruction;
+}
+
+async function refreshKeyCounts() {
+  renderKeyCounts(await loadKeyCounts());
+}
+
+async function editKeyCounts() {
+  const entered = prompt("Enter passphrase to edit key counts:");
+  if (entered === null) return;
+  if (entered !== DELETE_PASSPHRASE) {
+    alert("Incorrect passphrase — nothing changed.");
+    return;
+  }
+  const current = await loadKeyCounts();
+  const terrorStr = prompt("Key of Terror count:", current.terror);
+  if (terrorStr === null) return;
+  const hateStr = prompt("Key of Hate count:", current.hate);
+  if (hateStr === null) return;
+  const destructionStr = prompt("Key of Destruction count:", current.destruction);
+  if (destructionStr === null) return;
+  const terror = parseInt(terrorStr, 10);
+  const hate = parseInt(hateStr, 10);
+  const destruction = parseInt(destructionStr, 10);
+  if ([terror, hate, destruction].some(n => !Number.isInteger(n) || n < 0)) {
+    alert("All three values must be whole numbers ≥ 0 — nothing changed.");
+    return;
+  }
+  const { data, error } = await sb.from("key_counts")
+    .update({ terror, hate, destruction, updated_at: new Date().toISOString() })
+    .eq("id", 1)
+    .select();
+  if (error) {
+    alert(`Update failed: ${error.message}`);
+    return;
+  }
+  if (!data || data.length === 0) {
+    alert(
+      "Update request succeeded but changed 0 rows — this usually means the " +
+      "key_counts update policy hasn't been added yet " +
+      "(see supabase/migrations/0004_key_counts.sql) — nothing was changed."
+    );
+    return;
+  }
+  renderKeyCounts(data[0]);
+}
+
+document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
+
 async function loadTrialCount() {
   const { count } = await sb.from("summoner_trials").select("*", { count: "exact", head: true });
   return count || 0;
@@ -300,6 +383,84 @@ function renderArmChart(runs) {
     options: {
       responsive: true,
       scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + "%" } } },
+    },
+  });
+}
+
+function dayKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+let dailyLootChart = null;
+function renderDailyLootChart(runs) {
+  const byDay = new Map();
+  runs.forEach(r => {
+    const day = dayKey(r.started_at);
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(r);
+  });
+  const days = [...byDay.keys()].sort();
+  const datasets = LOOT_GROUPS.map(([group, keys]) => ({
+    label: `${LOOT_ICONS[group]} ${group}`,
+    backgroundColor: LOOT_COLORS[group] || "#888780",
+    stack: "d",
+    data: days.map(day => {
+      const dayRuns = byDay.get(day);
+      const allKeys = dayRuns.flatMap(r => (r.loots || []).map(l => l.key || l.label));
+      return allKeys.filter(k => keys.includes(k)).length;
+    }),
+  }));
+  const ctx = document.getElementById("dailyLootChart");
+  if (dailyLootChart) dailyLootChart.destroy();
+  dailyLootChart = new Chart(ctx, {
+    type: "bar",
+    data: { labels: days, datasets },
+    options: {
+      responsive: true,
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+// 1-minute buckets chosen from observed run durations (roughly 1-6 minutes
+// for this build); "6m+" catches outliers without needing unbounded labels.
+const DURATION_BUCKETS = ["0-1m", "1-2m", "2-3m", "3-4m", "4-5m", "5-6m", "6m+"];
+function durationBucketLabel(seconds) {
+  const m = Math.floor(seconds / 60);
+  return m >= 6 ? "6m+" : `${m}-${m + 1}m`;
+}
+
+let durationChart = null;
+function renderDurationChart(runs) {
+  const counts = Object.fromEntries(DURATION_BUCKETS.map(b => [b, 0]));
+  runs.forEach(r => {
+    const seconds = (new Date(r.ended_at) - new Date(r.started_at)) / 1000;
+    counts[durationBucketLabel(seconds)]++;
+  });
+  const total = runs.length || 1;
+  const ctx = document.getElementById("durationChart");
+  if (durationChart) durationChart.destroy();
+  durationChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: DURATION_BUCKETS,
+      datasets: [{
+        label: "% of runs",
+        data: DURATION_BUCKETS.map(b => 100 * counts[b] / total),
+        backgroundColor: "#378ADD",
+      }],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + "%" } } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${counts[ctx.label]} run(s) (${ctx.formattedValue}%)`,
+          },
+        },
+      },
     },
   });
 }
@@ -470,6 +631,30 @@ function renderTrialSummary(elId, runs, maxRuns) {
     `${runs.length} / ${maxRuns ?? "?"} runs — avg ${avgDurationLabel(runs)}/run — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
 }
 
+function pct(n, d) {
+  return d > 0 ? Math.round(100 * n / d) : 0;
+}
+
+// Mirrors the ratios already reported in the bot's Discord routine message
+// (gui_app.py _flush_pending_summoner_routine stats_line) — same definitions,
+// just computed here from the run rows instead of bot-side counters. Stash
+// ratio excludes "bypass" runs (no loot to deposit) from its denominator,
+// same as the Discord message, so it only reflects actual deposit attempts.
+function renderRatioStats(elId, runs) {
+  const total = runs.length;
+  const success = runs.filter(r => r.result === "found").length;
+  const bossMiss = runs.filter(r => r.result === "miss").length;
+  const portalFail = runs.filter(r => r.result === "portal_fail").length;
+  const stashSuccess = runs.filter(r => r.stash_result === "success").length;
+  const stashFail = runs.filter(r => r.stash_result === "fail").length;
+  const stashTotal = stashSuccess + stashFail;
+  document.getElementById(elId).textContent = total === 0 ? "" :
+    `✅ Success ${success}/${total} (${pct(success, total)}%) · ` +
+    `❌ Boss not found ${bossMiss}/${total} (${pct(bossMiss, total)}%) · ` +
+    `🌀 Portal not found ${portalFail}/${total} (${pct(portalFail, total)}%) · ` +
+    `📦 Stash ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%)`;
+}
+
 async function refreshLive() {
   const trial = await loadMostRecentTrial();
   if (!trial) {
@@ -495,6 +680,7 @@ async function refreshLive() {
     inProgressEl.textContent = "";
   }
 
+  renderRatioStats("liveRatios", runs);
   renderLootTally(runs, "liveLootTally");
   renderRunFeed("liveFeedBody", runs, "liveDetail");
 }
@@ -503,6 +689,8 @@ async function refreshHistory() {
   const [runs, trialCount] = await Promise.all([loadRuns(), loadTrialCount()]);
   renderStats(runs, trialCount);
   renderArmChart(runs);
+  renderDailyLootChart(runs);
+  renderDurationChart(runs);
 }
 
 async function populateTrialPicker() {
@@ -615,16 +803,31 @@ sb.channel("summoner_runs_live")
     refreshLive();
     populateTrialPicker();
   })
+  .on("postgres_changes", { event: "*", schema: "public", table: "key_counts" }, refreshKeyCounts)
   .subscribe();
 
-document.getElementById("armChartPanel").open = !window.matchMedia("(max-width: 600px)").matches;
-document.getElementById("armChartPanel").addEventListener("toggle", (e) => {
-  if (e.target.open && chart) chart.resize();
-});
+// Each chart-bearing <details> panel starts collapsed on mobile (closed
+// content is display:none, so Chart.js measures a zero-size canvas on
+// first render) and needs a resize() call once the user actually opens it
+// — see docs/plans/2026-06-22-mobile-responsive-plan.md Task 4 for the
+// original single-panel version of this; generalized here to cover all
+// chart panels instead of duplicating the same two lines per chart.
+function setupCollapsibleChartPanel(panelId, getChart) {
+  const panel = document.getElementById(panelId);
+  panel.open = !window.matchMedia("(max-width: 600px)").matches;
+  panel.addEventListener("toggle", () => {
+    const c = getChart();
+    if (panel.open && c) c.resize();
+  });
+}
+setupCollapsibleChartPanel("armChartPanel", () => chart);
+setupCollapsibleChartPanel("dailyLootChartPanel", () => dailyLootChart);
+setupCollapsibleChartPanel("durationChartPanel", () => durationChart);
 
 refreshLive();
 refreshHistory();
 populateTrialPicker();
+refreshKeyCounts();
 
 // Realtime pushes are best-effort: a tab open before a trial starts, a
 // brief websocket drop, or a missed event all mean the page can fall out
