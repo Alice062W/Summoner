@@ -392,20 +392,22 @@ function renderArmChart(runs) {
   const ctx = document.getElementById("armChart");
   if (chart) chart.destroy();
   chart = new Chart(ctx, {
-    type: "pie",
+    type: "bar",
     data: {
       labels: arms.map(a => `${ARM_ICONS[a]} ${a}`),
       datasets: [{
-        data: counts,
+        label: "% of boss-found runs",
+        data: counts.map(c => 100 * c / (total || 1)),
         backgroundColor: ["#1D9E75", "#378ADD", "#E0A23C", "#D87878"],
       }],
     },
     options: {
       responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + "%" } } },
       plugins: {
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.label}: ${ctx.parsed} (${pct(ctx.parsed, total)}%)`,
+            label: (ctx) => `${counts[ctx.dataIndex]} run(s) (${ctx.formattedValue}%)`,
           },
         },
       },
