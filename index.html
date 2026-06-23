@@ -965,7 +965,14 @@ refreshKeyCounts();
 // fallback that doesn't depend on the websocket connection at all — it
 // just re-fetches and re-renders the Live tab every 15s, same as a manual
 // refresh would, so a missed push is corrected automatically within 15s.
-setInterval(refreshLive, 15000);
+// key_counts is included here too: it was created via raw SQL (migration
+// 0004) rather than the table editor, so it may not be part of the
+// supabase_realtime publication — this poll keeps it self-healing even if
+// the websocket event for it never fires.
+setInterval(() => {
+  refreshLive();
+  refreshKeyCounts();
+}, 15000);
 </script>
 </body>
 </html>
