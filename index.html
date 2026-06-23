@@ -163,7 +163,7 @@
   </div>
 
   <details class="panel" id="lootLineChartPanel">
-    <summary><strong>Loots by category</strong></summary>
+    <summary><strong>Loot statistics</strong></summary>
     <select id="lootGranularity" style="margin-top:8px;">
       <option value="hour">By hour</option>
       <option value="day" selected>By day</option>
@@ -477,6 +477,41 @@ function renderLootLineChart(runs) {
     // toggles them on, same as Chart.js's built-in legend click behavior.
     hidden: group !== "Keys",
   }));
+
+  // Run-count curves alongside the loot curves, same bucketing/x-axis.
+  // "Failed" covers both ways a run can come up empty: boss not found
+  // (result === "miss") and portal/waypoint not found (result === "portal_fail").
+  datasets.push(
+    {
+      label: "📊 Total runs",
+      data: buckets.map(b => byBucket.get(b).length),
+      borderColor: "#a8916a",
+      backgroundColor: "#a8916a",
+      borderDash: [5, 3],
+      pointStyle: "rectRounded",
+      tension: 0.25,
+      hidden: true,
+    },
+    {
+      label: "✅ Successful runs",
+      data: buckets.map(b => byBucket.get(b).filter(r => r.result === "found").length),
+      borderColor: "#1D9E75",
+      backgroundColor: "#1D9E75",
+      pointStyle: "circle",
+      tension: 0.25,
+      hidden: true,
+    },
+    {
+      label: "❌ Failed runs",
+      data: buckets.map(b => byBucket.get(b).filter(r => r.result === "miss" || r.result === "portal_fail").length),
+      borderColor: "#D87878",
+      backgroundColor: "#D87878",
+      pointStyle: "triangle",
+      tension: 0.25,
+      hidden: true,
+    },
+  );
+
   const ctx = document.getElementById("lootLineChart");
   if (lootLineChart) lootLineChart.destroy();
   lootLineChart = new Chart(ctx, {
