@@ -837,8 +837,10 @@ async function populateTrialPicker() {
   trials.forEach(t => {
     const opt = document.createElement("option");
     opt.value = t.trial_id;
-    const when = new Date(t.started_at).toLocaleString();
-    opt.textContent = `${t.trial_id} — ${when} (${t.max_runs ?? "?"} planned)`;
+    // trial_id is an internally-generated timestamp string (see
+    // countess_logic._start_trial_log), so it already encodes the date/time
+    // — no need to repeat it via toLocaleString() here.
+    opt.textContent = `${t.trial_id} (${t.max_runs ?? "?"} planned)`;
     sel.appendChild(opt);
   });
   if (trials.some(t => t.trial_id === prevValue)) sel.value = prevValue;
