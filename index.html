@@ -26,9 +26,14 @@
   .expand-btn { cursor: pointer; border: none; background: none; font-size: 12px; color: #a8916a; padding: 0 4px; }
   .detail-row td { background: #221a12; font-size: 12px; padding: 10px 12px; }
   .detail-row th.arm-cell, .detail-row td.arm-cell { padding: 3px 8px; }
-  .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-  .status-dot.green { background: #5a9c4a; box-shadow: 0 0 6px #5a9c4a; }
-  .status-dot.red { background: #9c3a3a; box-shadow: 0 0 6px #9c3a3a; }
+  .status-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .status-dot.green { background: #5a9c4a; box-shadow: 0 0 8px #5a9c4a; animation: pulse-green 1.6s ease-in-out infinite; }
+  .status-dot.red { background: #9c3a3a; box-shadow: 0 0 8px #9c3a3a; }
+  @keyframes pulse-green {
+    0%, 100% { box-shadow: 0 0 6px #5a9c4a; }
+    50% { box-shadow: 0 0 14px 3px #5a9c4a; }
+  }
+  .current-run-highlight { color: #f0d878; font-weight: 700; font-size: 16px; text-shadow: 0 0 6px rgba(240,216,120,0.5); }
   .loot-tally { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .loot-tally span { background: #2a2018; border: 1px solid #4a3a24; border-radius: 6px; padding: 3px 10px; font-size: 13px; color: #d8c9a8; }
   .loot-tally span.key-group { background: #3a2e10; border-color: #c9a227; color: #f0d878; font-weight: 700; }
@@ -50,6 +55,8 @@
     .tab-btn { padding: 12px 16px; font-size: 15px; }
     select, #deleteTrialBtn { min-height: 44px; font-size: 15px; }
     .expand-btn { min-height: 44px; min-width: 44px; font-size: 18px; }
+    .status-dot { width: 18px; height: 18px; margin-right: 10px; }
+    .current-run-highlight { font-size: 19px; }
     .run-table thead { display: none; }
     .run-table, .run-table tbody, .run-table tr { display: block; width: 100%; }
     .run-table tbody tr:not(.detail-row) { border: 1px solid #3a2e1e; border-radius: 8px; margin-bottom: 8px; padding: 6px 8px; background: #1c1610; }
@@ -802,7 +809,7 @@ async function refreshLive() {
 
   const inProgressEl = document.getElementById("liveInProgress");
   if (isRunning && trial.max_runs && runs.length < trial.max_runs) {
-    inProgressEl.textContent = `Run ${runs.length + 1} in progress…`;
+    inProgressEl.innerHTML = `Run <span class="current-run-highlight">${runs.length + 1}</span> in progress…`;
   } else {
     inProgressEl.textContent = "";
   }
