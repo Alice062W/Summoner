@@ -774,7 +774,7 @@ function pct(n, d) {
 // just computed here from the run rows instead of bot-side counters. Stash
 // ratio excludes "bypass" runs (no loot to deposit) from its denominator,
 // same as the Discord message, so it only reflects actual deposit attempts.
-function renderRatioStats(elId, runs) {
+function renderRatioStats(elId, runs, mercRevivals) {
   const total = runs.length;
   const success = runs.filter(r => r.result === "found").length;
   const bossMiss = runs.filter(r => r.result === "miss").length;
@@ -786,7 +786,8 @@ function renderRatioStats(elId, runs) {
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `❌ ${bossMiss}/${total} (${pct(bossMiss, total)}%) · ` +
     `🌀 ${portalFail}/${total} (${pct(portalFail, total)}%) · ` +
-    `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%)`;
+    `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
+    `🧟 ${mercRevivals ?? 0}`;
 }
 
 async function refreshLive() {
@@ -814,7 +815,7 @@ async function refreshLive() {
     inProgressEl.textContent = "";
   }
 
-  renderRatioStats("liveRatios", runs);
+  renderRatioStats("liveRatios", runs, trial.merc_revivals);
   renderLootTally(runs, "liveLootTally");
   renderRunFeed("liveFeedBody", runs, "liveDetail");
 }
