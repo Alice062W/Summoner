@@ -425,6 +425,7 @@ function renderRuneInventory(row, trialProgress) {
   const counts = row.counts || {};
   const pickups = (trialProgress && trialProgress.rune_pickups) || {};
   const goldCollected = (trialProgress && trialProgress.gold_collected) || 0;
+  const goldTotal = (trialProgress && trialProgress.gold_total) || 0;
   const grid = document.getElementById("runeGrid");
   grid.innerHTML = RUNE_ORDER.map((name, i) => {
     const count = counts[name] || 0;
@@ -442,11 +443,17 @@ function renderRuneInventory(row, trialProgress) {
     </div>`;
   }).join("");
   // Empty area of the irregular grid (row 4, columns 3-7, 1-indexed) — the
-  // 5 unused cells between the row's outer rune pairs — hosts the trial's
-  // running gold-collected total.
+  // 5 unused cells between the row's outer rune pairs — hosts the stash's
+  // current total gold alongside this trial's running collected total.
   grid.innerHTML += `<div class="rune-gold-box" style="grid-row:4; grid-column:3 / span 5;">
-    <p class="rune-gold-label">💰 Gold Collected (this trial)</p>
-    <p class="rune-gold-amount">${goldCollected.toLocaleString()}</p>
+    <div>
+      <p class="rune-gold-label">💰 Total Gold (stash)</p>
+      <p class="rune-gold-amount">${goldTotal.toLocaleString()}</p>
+    </div>
+    <div style="margin-top:6px;">
+      <p class="rune-gold-label">Collected (this trial)</p>
+      <p class="rune-gold-amount" style="font-size:20px;">${goldCollected.toLocaleString()}</p>
+    </div>
   </div>`;
   document.getElementById("runeUpdatedAt").textContent = row.updated_at
     ? "updated " + new Date(row.updated_at).toLocaleTimeString()
