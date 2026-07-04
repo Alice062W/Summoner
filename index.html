@@ -613,22 +613,26 @@ const LOOT_POINT_STYLES = {
   "Charms": "star", "Rings": "cross", "Amulets": "rectRounded", "Uniq. Boots": "crossRot", "W. Shards": "circle",
 };
 
-// Pul-or-higher rune pickups are logged as individual timestamped rows
-// (see supabase/migrations/0009_warlock_high_rune_events.sql) rather than
-// being derivable from warlock_runs.loots, since the bot only knows a
-// generic "a rune dropped" at ground-pickup time — specific rune identity
-// is only known once it shows up on the stash tab. Only tracks pickups
-// from when this table was added onward; earlier trials have no data here.
-async function loadHighRuneEvents() {
+// Rune pickups (any tier) are logged as individual timestamped rows (see
+// supabase/migrations/0009_warlock_rune_events.sql) rather than being
+// derivable from warlock_runs.loots, since the bot only knows a generic
+// "a rune dropped" at ground-pickup time — specific rune identity is only
+// known once it shows up on the stash tab. Only tracks pickups from when
+// this table was added onward; earlier trials have no data here.
+async function loadRuneEvents() {
   const hours = parseInt(document.getElementById("rangeFilter").value, 10);
   const { data, error } = await sb
-    .from("warlock_high_rune_events")
+    .from("warlock_rune_events")
     .select("*")
     .gte("occurred_at", rangeStartIso(hours))
     .order("occurred_at", { ascending: true })
     .limit(5000);
   return error ? [] : data;
 }
+
+// Pul is the dividing line between "low" and "high" runes for these curves.
+const PUL_INDEX = RUNE_ORDER.indexOf("pul");
+const isHighRune = rune => RUNE_ORDER.indexOf(rune) >= PUL_INDEX;
 
 let lootLineChart = null;
 async function renderLootLineChart(runs) {
@@ -642,8 +646,8 @@ async function renderLootLineChart(runs) {
   });
 
   const isWarlock = currentBot === "warlock";
-  const highRuneEvents = isWarlock ? await loadHighRuneEvents() : [];
-  highRuneEvents.forEach(ev => {
+  const runeEvents = isWarlock ? await loadRuneEvents() : [];
+  runeEvents.forEach(ev => {
     const b = keyFn(ev.occurred_at);
     if (!byBucket.has(b)) byBucket.set(b, []);
   });
@@ -672,20 +676,33 @@ async function renderLootLineChart(runs) {
   }));
 
   if (isWarlock) {
-    const highRuneByBucket = new Map();
-    highRuneEvents.forEach(ev => {
+    const highByBucket = new Map();
+    const lowByBucket = new Map();
+    runeEvents.forEach(ev => {
       const b = keyFn(ev.occurred_at);
-      highRuneByBucket.set(b, (highRuneByBucket.get(b) || 0) + ev.delta);
+      const target = isHighRune(ev.rune) ? highByBucket : lowByBucket;
+      target.set(b, (target.get(b) || 0) + ev.delta);
     });
-    datasets.push({
-      label: "🔺 Pul+ Runes",
-      data: buckets.map(b => highRuneByBucket.get(b) || 0),
-      borderColor: "#ffce54",
-      backgroundColor: "#ffce54",
-      pointStyle: "star",
-      tension: 0.25,
-      hidden: false,
-    });
+    datasets.push(
+      {
+        label: "🔺 Pul+ Runes",
+        data: buckets.map(b => highByBucket.get(b) || 0),
+        borderColor: "#ffce54",
+        backgroundColor: "#ffce54",
+        pointStyle: "star",
+        tension: 0.25,
+        hidden: false,
+      },
+      {
+        label: "🔻 Sub-Pul Runes",
+        data: buckets.map(b => lowByBucket.get(b) || 0),
+        borderColor: "#888780",
+        backgroundColor: "#888780",
+        pointStyle: "triangle",
+        tension: 0.25,
+        hidden: true,
+      },
+    );
   }
 
   // Run-count curves alongside the loot curves, same bucketing/x-axis.
