@@ -51,6 +51,15 @@
   .key-count-box.hate { background: linear-gradient(160deg, #3a2410, #1c1610); border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.45), inset 0 0 14px rgba(201,162,39,0.15); }
   .key-count-box.hate p:last-child { color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.6); }
   .bot-switcher { display: inline-block; margin-right: 16px; }
+  .rune-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; margin-top: 10px; }
+  .rune-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 6px 4px; text-align: center; }
+  .rune-box img { width: 40px; height: 40px; object-fit: contain; display: block; margin: 0 auto 4px; opacity: 0.55; }
+  .rune-box.has-count img { opacity: 1; }
+  .rune-box p.rune-name { font-size: 10px; color: #a8916a; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+  .rune-box p.rune-count { font-size: 16px; font-weight: 700; margin: 2px 0 0; color: #d8c9a8; }
+  .rune-box.has-count p.rune-count { color: #f0d878; }
+  .rune-box.rune-changed { border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.5), inset 0 0 10px rgba(201,162,39,0.15); }
+  .rune-box.rune-changed p.rune-count { color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.6); }
   @media (max-width: 600px) {
     body { font-size: 16px; padding: 0 0.75rem; margin: 1rem auto; }
     .tab-btn { padding: 12px 16px; font-size: 15px; }
@@ -90,6 +99,14 @@
     <div class="key-count-box hate"><p>🔥 Hate</p><p id="keyHate">-</p></div>
     <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
   </div>
+</div>
+
+<div id="runeStatsPanel" class="panel" style="display:none;">
+  <div style="display:flex; align-items:center; justify-content:space-between;">
+    <strong>🪨 Stash Runes</strong>
+    <span id="runeUpdatedAt" style="font-size:12px; color:#5f5e5a;"></span>
+  </div>
+  <div class="rune-grid" id="runeGrid"></div>
 </div>
 
 <div id="legendPanel" class="panel" style="display:none;">
@@ -255,6 +272,14 @@ const LOOT_COLORS = {
   "W. Shards": "#5fc7d8",
 };
 
+// El (lowest) → Zod (highest) — must match RUNE_ORDER in behaviors/warlock_logic.py.
+const RUNE_ORDER = [
+  "el", "eld", "tir", "nef", "eth", "ith", "tal", "ral", "ort", "thul",
+  "amn", "sol", "shael", "dol", "hel", "io", "lum", "ko", "fal", "lem",
+  "pul", "um", "mal", "ist", "gul", "vex", "ohm", "lo", "sur", "ber",
+  "jah", "cham", "zod",
+];
+
 const METHOD_ICONS = { base: "🎯", pillar: "📍", miss: "❌" };
 const ARM_ICONS = { NE: "↗️", NW: "↖️", SE: "↘️", SW: "↙️" };
 
@@ -302,6 +327,10 @@ function initBotUI() {
   document.title = BOT_CONFIGS[currentBot].title;
   document.getElementById("armChartPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("statCard4Label").textContent = isWarlock ? "Merc rev. / Stash fails" : "Avg runs / key";
+  // Warlock tracks stash runes instead of the manually-edited stash keys —
+  // Summoner has no rune OCR pipeline, so it keeps the key-counts panel.
+  document.getElementById("keyCountsPanel").style.display = isWarlock ? "none" : "";
+  document.getElementById("runeStatsPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
     ? `<tr><th></th><th>run</th><th>status</th><th>loot</th><th>when</th></tr>`
     : `<tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr>`;
@@ -318,6 +347,7 @@ function setBot(name) {
   refreshLive();
   refreshHistory();
   populateTrialPicker();
+  refreshRuneInventory();
 }
 
 function hourBucket(hour) {
@@ -360,6 +390,42 @@ function renderKeyCounts(counts) {
 
 async function refreshKeyCounts() {
   renderKeyCounts(await loadKeyCounts());
+}
+
+async function loadRuneInventory() {
+  const { data, error } = await sb.from("warlock_rune_inventory").select("*").eq("id", 1).limit(1);
+  if (error || !data || data.length === 0) return { counts: {}, prev_counts: {}, updated_at: null };
+  return data[0];
+}
+
+// Highlights any rune whose count differs from prev_counts — prev_counts is
+// the snapshot from the visit *before* the latest one (shifted server-side,
+// see upsert_warlock_rune_inventory in supabase/migrations/0007), so this
+// shows what changed on the most recent stash visit.
+function renderRuneInventory(row) {
+  const counts = row.counts || {};
+  const prev = row.prev_counts || {};
+  const grid = document.getElementById("runeGrid");
+  grid.innerHTML = RUNE_ORDER.map(name => {
+    const count = counts[name] || 0;
+    const changed = (counts[name] || 0) !== (prev[name] || 0);
+    const cls = ["rune-box"];
+    if (count > 0) cls.push("has-count");
+    if (changed) cls.push("rune-changed");
+    return `<div class="${cls.join(" ")}" title="${name}${changed ? " (changed)" : ""}">
+      <img src="assets/runes/${name}.png" alt="${name}">
+      <p class="rune-name">${name}</p>
+      <p class="rune-count">${count}</p>
+    </div>`;
+  }).join("");
+  document.getElementById("runeUpdatedAt").textContent = row.updated_at
+    ? "updated " + new Date(row.updated_at).toLocaleTimeString()
+    : "";
+}
+
+async function refreshRuneInventory() {
+  if (currentBot !== "warlock") return;
+  renderRuneInventory(await loadRuneInventory());
 }
 
 async function editKeyCounts() {
@@ -1128,6 +1194,7 @@ sb.channel("bot_runs_live")
     populateTrialPicker();
   })
   .on("postgres_changes", { event: "*", schema: "public", table: "key_counts" }, refreshKeyCounts)
+  .on("postgres_changes", { event: "*", schema: "public", table: "warlock_rune_inventory" }, refreshRuneInventory)
   .subscribe();
 
 // Each chart-bearing <details> panel starts collapsed on mobile (closed
@@ -1153,6 +1220,7 @@ refreshLive();
 refreshHistory();
 populateTrialPicker();
 refreshKeyCounts();
+refreshRuneInventory();
 
 // Realtime pushes are best-effort: a tab open before a trial starts, a
 // brief websocket drop, or a missed event all mean the page can fall out
@@ -1167,6 +1235,7 @@ refreshKeyCounts();
 setInterval(() => {
   refreshLive();
   refreshKeyCounts();
+  refreshRuneInventory();
 }, 15000);
 </script>
 </body>
