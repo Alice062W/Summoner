@@ -51,7 +51,8 @@
   .key-count-box.hate { background: linear-gradient(160deg, #3a2410, #1c1610); border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.45), inset 0 0 14px rgba(201,162,39,0.15); }
   .key-count-box.hate p:last-child { color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.6); }
   .bot-switcher { display: inline-block; margin-right: 16px; }
-  .rune-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; margin-top: 10px; }
+  .rune-grid { display: grid; grid-template-columns: repeat(9, minmax(50px, 1fr)); gap: 8px; margin-top: 10px; }
+  @media (max-width: 600px) { .rune-grid { grid-template-columns: repeat(9, minmax(32px, 1fr)); gap: 4px; } }
   .rune-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 6px 4px; text-align: center; }
   .rune-box img { width: 40px; height: 40px; object-fit: contain; display: block; margin: 0 auto 4px; opacity: 0.55; }
   .rune-box.has-count img { opacity: 1; }
@@ -280,6 +281,16 @@ const RUNE_ORDER = [
   "jah", "cham", "zod",
 ];
 
+// (row, col), 0-indexed — the stash 符文 tab's actual irregular layout: 3
+// full rows of 9, then a row of 4 (outer two columns each side), then a row
+// of 2 (far corners only). Must match _RUNE_SLOT_POSITIONS in
+// behaviors/warlock_logic.py so the dashboard mirrors the in-game tab shape.
+const RUNE_SLOT_POSITIONS = [
+  ...Array.from({ length: 3 }, (_, r) => Array.from({ length: 9 }, (_, c) => [r, c])).flat(),
+  [3, 0], [3, 1], [3, 7], [3, 8],
+  [4, 0], [4, 8],
+];
+
 const METHOD_ICONS = { base: "🎯", pillar: "📍", miss: "❌" };
 const ARM_ICONS = { NE: "↗️", NW: "↖️", SE: "↘️", SW: "↙️" };
 
@@ -406,13 +417,14 @@ function renderRuneInventory(row) {
   const counts = row.counts || {};
   const prev = row.prev_counts || {};
   const grid = document.getElementById("runeGrid");
-  grid.innerHTML = RUNE_ORDER.map(name => {
+  grid.innerHTML = RUNE_ORDER.map((name, i) => {
     const count = counts[name] || 0;
     const changed = (counts[name] || 0) !== (prev[name] || 0);
     const cls = ["rune-box"];
     if (count > 0) cls.push("has-count");
     if (changed) cls.push("rune-changed");
-    return `<div class="${cls.join(" ")}" title="${name}${changed ? " (changed)" : ""}">
+    const [r, c] = RUNE_SLOT_POSITIONS[i];
+    return `<div class="${cls.join(" ")}" style="grid-row:${r + 1}; grid-column:${c + 1};" title="${name}${changed ? " (changed)" : ""}">
       <img src="assets/runes/${name}.png" alt="${name}">
       <p class="rune-name">${name}</p>
       <p class="rune-count">${count}</p>
