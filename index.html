@@ -59,8 +59,12 @@
   .rune-box p.rune-name { font-size: 10px; color: #a8916a; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; }
   .rune-box p.rune-count { font-size: 16px; font-weight: 700; margin: 2px 0 0; color: #d8c9a8; }
   .rune-box.has-count p.rune-count { color: #f0d878; }
-  .rune-box.rune-changed { border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.5), inset 0 0 10px rgba(201,162,39,0.15); }
+  .rune-box.rune-changed { border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.5), inset 0 0 10px rgba(201,162,39,0.15); position: relative; }
   .rune-box.rune-changed p.rune-count { color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.6); }
+  .rune-collected-badge { position: absolute; top: -6px; right: -6px; background: #c9a227; color: #1c1610; font-size: 10px; font-weight: 700; line-height: 1; border-radius: 999px; padding: 3px 5px; box-shadow: 0 0 6px rgba(201,162,39,0.7); }
+  .rune-gold-box { display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(160deg, #3a2410, #1c1610); border: 1px solid #c9a227; border-radius: 8px; box-shadow: 0 0 10px rgba(201,162,39,0.35), inset 0 0 14px rgba(201,162,39,0.1); }
+  .rune-gold-label { font-size: 12px; color: #a8916a; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+  .rune-gold-amount { font-size: 26px; font-weight: 700; margin: 4px 0 0; color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.5); }
   @media (max-width: 600px) {
     body { font-size: 16px; padding: 0 0.75rem; margin: 1rem auto; }
     .tab-btn { padding: 12px 16px; font-size: 15px; }
@@ -409,27 +413,41 @@ async function loadRuneInventory() {
   return data[0];
 }
 
-// Highlights any rune whose count differs from prev_counts — prev_counts is
-// the snapshot from the visit *before* the latest one (shifted server-side,
-// see upsert_warlock_rune_inventory in supabase/migrations/0007), so this
-// shows what changed on the most recent stash visit.
-function renderRuneInventory(row) {
+// gold_collected/rune_pickups come from the *current trial's* row (see
+// supabase/migrations/0008_warlock_trial_progress.sql) — both are diffed
+// server-side against a baseline taken at the stash before run 1, so they
+// represent "collected so far this trial" and reset to 0/{} on the next
+// trial. Unlike the old prev_counts-diff highlight (which only lit up
+// whatever changed on the *latest* visit and went dark again next time),
+// highlighting from rune_pickups persists for the whole trial once a rune
+// is collected, per the user's request to never remove it mid-trial.
+function renderRuneInventory(row, trialProgress) {
   const counts = row.counts || {};
-  const prev = row.prev_counts || {};
+  const pickups = (trialProgress && trialProgress.rune_pickups) || {};
+  const goldCollected = (trialProgress && trialProgress.gold_collected) || 0;
   const grid = document.getElementById("runeGrid");
   grid.innerHTML = RUNE_ORDER.map((name, i) => {
     const count = counts[name] || 0;
-    const changed = (counts[name] || 0) !== (prev[name] || 0);
+    const collected = pickups[name] || 0;
     const cls = ["rune-box"];
     if (count > 0) cls.push("has-count");
-    if (changed) cls.push("rune-changed");
+    if (collected > 0) cls.push("rune-changed");
     const [r, c] = RUNE_SLOT_POSITIONS[i];
-    return `<div class="${cls.join(" ")}" style="grid-row:${r + 1}; grid-column:${c + 1};" title="${name}${changed ? " (changed)" : ""}">
+    const badge = collected > 0 ? `<span class="rune-collected-badge">+${collected}</span>` : "";
+    return `<div class="${cls.join(" ")}" style="grid-row:${r + 1}; grid-column:${c + 1};" title="${name}${collected ? ` (${collected} collected this trial)` : ""}">
+      ${badge}
       <img src="assets/runes/${name}.png" alt="${name}">
       <p class="rune-name">${name}</p>
       <p class="rune-count">${count}</p>
     </div>`;
   }).join("");
+  // Empty area of the irregular grid (row 4, columns 3-7, 1-indexed) — the
+  // 5 unused cells between the row's outer rune pairs — hosts the trial's
+  // running gold-collected total.
+  grid.innerHTML += `<div class="rune-gold-box" style="grid-row:4; grid-column:3 / span 5;">
+    <p class="rune-gold-label">💰 Gold Collected (this trial)</p>
+    <p class="rune-gold-amount">${goldCollected.toLocaleString()}</p>
+  </div>`;
   document.getElementById("runeUpdatedAt").textContent = row.updated_at
     ? "updated " + new Date(row.updated_at).toLocaleTimeString()
     : "";
@@ -437,7 +455,8 @@ function renderRuneInventory(row) {
 
 async function refreshRuneInventory() {
   if (currentBot !== "warlock") return;
-  renderRuneInventory(await loadRuneInventory());
+  const [row, trial] = await Promise.all([loadRuneInventory(), loadMostRecentTrial()]);
+  renderRuneInventory(row, trial);
 }
 
 async function editKeyCounts() {
@@ -1205,6 +1224,7 @@ sb.channel("bot_runs_live")
     if (currentBot !== "warlock") return;
     refreshLive();
     populateTrialPicker();
+    refreshRuneInventory();   // gold_collected/rune_pickups live on this row too
   })
   .on("postgres_changes", { event: "*", schema: "public", table: "key_counts" }, refreshKeyCounts)
   .on("postgres_changes", { event: "*", schema: "public", table: "warlock_rune_inventory" }, refreshRuneInventory)
