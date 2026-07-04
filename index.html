@@ -106,14 +106,6 @@
   </div>
 </div>
 
-<div id="runeStatsPanel" class="panel" style="display:none;">
-  <div style="display:flex; align-items:center; justify-content:space-between;">
-    <strong>🪨 Stash Runes</strong>
-    <span id="runeUpdatedAt" style="font-size:12px; color:#5f5e5a;"></span>
-  </div>
-  <div class="rune-grid" id="runeGrid"></div>
-</div>
-
 <div id="legendPanel" class="panel" style="display:none;">
   <p><strong>Icon legend</strong></p>
   <div class="legend-grid">
@@ -145,6 +137,15 @@
 </div>
 
 <div id="liveTabPanel">
+  <div id="runeStatsPanel" class="panel" style="display:none;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <strong>🪨 Stash Runes (live — current stash totals)</strong>
+      <span id="runeUpdatedAt" style="font-size:12px; color:#5f5e5a;"></span>
+    </div>
+    <p style="margin:4px 0 0; font-size:12px; color:#5f5e5a;">Highlighted runes were collected so far this trial.</p>
+    <div class="rune-grid" id="runeGrid"></div>
+  </div>
+
   <div id="liveEmpty" class="panel" style="display:none;">
     <p style="color:#5f5e5a; text-align:center; margin:0; padding:2rem 0;">No trial data yet</p>
   </div>
@@ -187,6 +188,12 @@
       <option value="evening">Evening (18-24)</option>
       <option value="night">Night (0-6)</option>
     </select>
+  </div>
+
+  <div id="historyRuneStatsPanel" class="panel" style="display:none;">
+    <strong>🪨 Runes Collected (selected period above)</strong>
+    <p style="margin:4px 0 0; font-size:12px; color:#5f5e5a;">Total of each rune picked up within the date-range/hour filters above — not the current stash contents.</p>
+    <div class="rune-grid" id="historyRuneGrid"></div>
   </div>
 
   <div class="cards">
@@ -347,6 +354,7 @@ function initBotUI() {
   // Summoner has no rune OCR pipeline, so it keeps the key-counts panel.
   document.getElementById("keyCountsPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("runeStatsPanel").style.display = isWarlock ? "" : "none";
+  document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
     ? `<tr><th></th><th>run</th><th>status</th><th>loot</th><th>when</th></tr>`
     : `<tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr>`;
@@ -414,6 +422,32 @@ async function loadRuneInventory() {
   return data[0];
 }
 
+// Shared 33-icon irregular-grid renderer used by both the Live tab's
+// "current stash" table and the History tab's "collected in selected
+// period" table — `counts` is whatever number that panel's cell shows;
+// badgeCounts (if given) adds a small "+N" badge and highlight on top of
+// that number (Live's this-trial pickups); highlightSelf instead highlights
+// any cell whose own count is > 0 (History's "was collected in period").
+function renderRuneGrid(containerId, counts, { badgeCounts = null, highlightSelf = false } = {}) {
+  const grid = document.getElementById(containerId);
+  grid.innerHTML = RUNE_ORDER.map((name, i) => {
+    const count = counts[name] || 0;
+    const badgeVal = badgeCounts ? (badgeCounts[name] || 0) : 0;
+    const highlighted = badgeCounts ? badgeVal > 0 : (highlightSelf && count > 0);
+    const cls = ["rune-box"];
+    if (count > 0) cls.push("has-count");
+    if (highlighted) cls.push("rune-changed");
+    const [r, c] = RUNE_SLOT_POSITIONS[i];
+    const badge = badgeVal > 0 ? `<span class="rune-collected-badge">+${badgeVal}</span>` : "";
+    return `<div class="${cls.join(" ")}" style="grid-row:${r + 1}; grid-column:${c + 1};" title="${name}">
+      ${badge}
+      <img src="assets/runes/${name}.png" alt="${name}">
+      <p class="rune-name">${name}</p>
+      <p class="rune-count">${count}</p>
+    </div>`;
+  }).join("");
+}
+
 // gold_collected/rune_pickups come from the *current trial's* row (see
 // supabase/migrations/0008_warlock_trial_progress.sql) — both are diffed
 // server-side against a baseline taken at the stash before run 1, so they
@@ -427,26 +461,11 @@ function renderRuneInventory(row, trialProgress) {
   const pickups = (trialProgress && trialProgress.rune_pickups) || {};
   const goldCollected = (trialProgress && trialProgress.gold_collected) || 0;
   const goldTotal = (trialProgress && trialProgress.gold_total) || 0;
-  const grid = document.getElementById("runeGrid");
-  grid.innerHTML = RUNE_ORDER.map((name, i) => {
-    const count = counts[name] || 0;
-    const collected = pickups[name] || 0;
-    const cls = ["rune-box"];
-    if (count > 0) cls.push("has-count");
-    if (collected > 0) cls.push("rune-changed");
-    const [r, c] = RUNE_SLOT_POSITIONS[i];
-    const badge = collected > 0 ? `<span class="rune-collected-badge">+${collected}</span>` : "";
-    return `<div class="${cls.join(" ")}" style="grid-row:${r + 1}; grid-column:${c + 1};" title="${name}${collected ? ` (${collected} collected this trial)` : ""}">
-      ${badge}
-      <img src="assets/runes/${name}.png" alt="${name}">
-      <p class="rune-name">${name}</p>
-      <p class="rune-count">${count}</p>
-    </div>`;
-  }).join("");
+  renderRuneGrid("runeGrid", counts, { badgeCounts: pickups });
   // Empty area of the irregular grid (row 4, columns 3-7, 1-indexed) — the
   // 5 unused cells between the row's outer rune pairs — hosts the stash's
   // current total gold alongside this trial's running collected total.
-  grid.innerHTML += `<div class="rune-gold-box" style="grid-row:4; grid-column:3 / span 5;">
+  document.getElementById("runeGrid").innerHTML += `<div class="rune-gold-box" style="grid-row:4; grid-column:3 / span 5;">
     <div>
       <p class="rune-gold-label">💰 Total Gold (stash)</p>
       <p class="rune-gold-amount">${goldTotal.toLocaleString()}</p>
@@ -459,6 +478,19 @@ function renderRuneInventory(row, trialProgress) {
   document.getElementById("runeUpdatedAt").textContent = row.updated_at
     ? "updated " + new Date(row.updated_at).toLocaleTimeString()
     : "";
+}
+
+// History tab's rune table — totals of each rune *collected within the
+// currently-selected date-range/hour filters*, from the same
+// warlock_rune_events log the Pul+/Sub-Pul loot-statistics curves use.
+// Distinct meaning from the Live tab's table above: this is a historical
+// sum over a period, not the stash's current contents.
+async function renderHistoryRuneStats() {
+  if (currentBot !== "warlock") return;
+  const events = await loadRuneEvents();
+  const totals = {};
+  events.forEach(ev => { totals[ev.rune] = (totals[ev.rune] || 0) + ev.delta; });
+  renderRuneGrid("historyRuneGrid", totals, { highlightSelf: true });
 }
 
 async function refreshRuneInventory() {
@@ -621,13 +653,16 @@ const LOOT_POINT_STYLES = {
 // this table was added onward; earlier trials have no data here.
 async function loadRuneEvents() {
   const hours = parseInt(document.getElementById("rangeFilter").value, 10);
+  const hourSel = document.getElementById("hourFilter").value;
   const { data, error } = await sb
     .from("warlock_rune_events")
     .select("*")
     .gte("occurred_at", rangeStartIso(hours))
     .order("occurred_at", { ascending: true })
     .limit(5000);
-  return error ? [] : data;
+  if (error) return [];
+  if (hourSel === "all") return data;
+  return data.filter(ev => hourBucket(new Date(ev.occurred_at).getHours()) === hourSel);
 }
 
 // Pul is the dividing line between "low" and "high" runes for these curves.
@@ -1201,6 +1236,7 @@ async function refreshHistory() {
   if (BOT_CONFIGS[currentBot].hasArmChart) renderArmChart(runs);
   renderLootLineChart(runs);
   renderDurationChart(runs);
+  renderHistoryRuneStats();
 }
 
 async function populateTrialPicker() {
