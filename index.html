@@ -971,8 +971,10 @@ function renderWarlockDetailHtml(run) {
   const stashLabel = run.stash_result === "success" ? "✅ success"
     : run.stash_result === "fail" ? "❌ not found"
     : "↷ bypass (nothing to deposit)";
+  const durationLabel = fmtSeconds((new Date(run.ended_at) - new Date(run.started_at)) / 1000);
   return `
     <div><strong>Stash:</strong> ${stashLabel}</div>
+    <div style="margin-top:4px;"><strong>Time used:</strong> ${durationLabel}</div>
     <div style="margin-top:8px;">
       <strong>Loot:</strong>
       <ul style="margin:4px 0 0 18px; padding:0;">${lootRows}</ul>
