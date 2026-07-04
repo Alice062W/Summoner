@@ -50,6 +50,7 @@
   .key-count-box p:last-child { font-size: 28px; font-weight: 700; margin: 0; color: #f0d878; }
   .key-count-box.hate { background: linear-gradient(160deg, #3a2410, #1c1610); border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.45), inset 0 0 14px rgba(201,162,39,0.15); }
   .key-count-box.hate p:last-child { color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.6); }
+  .bot-switcher { display: inline-block; margin-right: 16px; }
   @media (max-width: 600px) {
     body { font-size: 16px; padding: 0 0.75rem; margin: 1rem auto; }
     .tab-btn { padding: 12px 16px; font-size: 15px; }
@@ -70,6 +71,10 @@
 <body>
 
 <div class="tabs">
+  <span class="bot-switcher">
+    <button class="tab-btn active" id="botBtnSummoner" onclick="setBot('summoner')">Summoner</button>
+    <button class="tab-btn" id="botBtnWarlock" onclick="setBot('warlock')">Warlock</button>
+  </span>
   <button class="tab-btn active" id="tabBtnLive" onclick="showTab('live')">Live Trial</button>
   <button class="tab-btn" id="tabBtnHistory" onclick="showTab('history')">History</button>
   <button class="tab-btn" id="legendToggleBtn" onclick="toggleLegend()" style="float:right;">ⓘ Legend</button>
@@ -135,7 +140,7 @@
     </div>
     <div class="panel">
       <table class="run-table">
-        <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
+        <thead id="liveFeedHead"><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
         <tbody id="liveFeedBody"></tbody>
       </table>
     </div>
@@ -166,7 +171,7 @@
     <div class="card"><p>Total runs</p><p id="statRuns">-</p></div>
     <div class="card"><p>Total trials</p><p id="statTrials">-</p></div>
     <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
-    <div class="card"><p>Avg runs / key</p><p id="statRunsPerKey">-</p></div>
+    <div class="card"><p id="statCard4Label">Avg runs / key</p><p id="statRunsPerKey">-</p></div>
   </div>
 
   <details class="panel" id="lootLineChartPanel">
@@ -198,7 +203,7 @@
     <p id="trialDetailStopReason" style="margin:2px 0 0; font-size:13px; color:#E24B4A;"></p>
     <div class="loot-tally" id="trialDetailLootTally"></div>
     <table class="run-table" style="margin-top:12px;">
-      <thead><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
+      <thead id="trialDetailHead"><tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr></thead>
       <tbody id="trialDetailBody"></tbody>
     </table>
   </div>
@@ -214,6 +219,18 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // and enabling delete at all means the anon key (already public) gains
 // real delete capability at the database level. See design doc Part 3.
 const DELETE_PASSPHRASE = "571028";
+
+// Two bots share this one dashboard page/URL — BOT_CONFIGS parameterizes the
+// table names and per-bot UI differences (Warlock has no boss-arm-search
+// concept, so hasArmChart is false and its run rows/detail are rendered by
+// separate renderWarlock* functions instead of reusing the arm-detail ones).
+const BOT_CONFIGS = {
+  summoner: { trialsTable: "summoner_trials", runsTable: "summoner_runs", hasArmChart: true, title: "Summoner bot dashboard" },
+  warlock:  { trialsTable: "warlock_trials",  runsTable: "warlock_runs",  hasArmChart: false, title: "Warlock bot dashboard" },
+};
+let currentBot = localStorage.getItem("selectedBot") || "summoner";
+if (!BOT_CONFIGS[currentBot]) currentBot = "summoner";
+let _lastMercRevivals = 0;
 
 const LOOT_GROUPS = [
   ["Runes", ["loot_rune"]],
@@ -274,6 +291,35 @@ function toggleLegend() {
   document.getElementById("legendToggleBtn").classList.toggle("active", !isOpen);
 }
 
+// Applies the currently-selected bot's UI differences: which chart panels
+// show, table header columns (Warlock has no arm/method concept), the 4th
+// history summary card's label, and the page title. Called on initial load
+// and every time setBot() switches bots.
+function initBotUI() {
+  const isWarlock = currentBot === "warlock";
+  document.getElementById("botBtnSummoner").classList.toggle("active", !isWarlock);
+  document.getElementById("botBtnWarlock").classList.toggle("active", isWarlock);
+  document.title = BOT_CONFIGS[currentBot].title;
+  document.getElementById("armChartPanel").style.display = isWarlock ? "none" : "";
+  document.getElementById("statCard4Label").textContent = isWarlock ? "Merc rev. / Stash fails" : "Avg runs / key";
+  const liveHead = isWarlock
+    ? `<tr><th></th><th>run</th><th>status</th><th>loot</th><th>when</th></tr>`
+    : `<tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr>`;
+  document.getElementById("liveFeedHead").innerHTML = liveHead;
+  document.getElementById("trialDetailHead").innerHTML = liveHead;
+}
+
+function setBot(name) {
+  if (!BOT_CONFIGS[name] || name === currentBot) return;
+  currentBot = name;
+  localStorage.setItem("selectedBot", name);
+  initBotUI();
+  clearTrialDetail();
+  refreshLive();
+  refreshHistory();
+  populateTrialPicker();
+}
+
 function hourBucket(hour) {
   if (hour >= 6 && hour < 12) return "morning";
   if (hour >= 12 && hour < 18) return "afternoon";
@@ -290,7 +336,7 @@ async function loadRuns() {
   const hours = parseInt(document.getElementById("rangeFilter").value, 10);
   const hourSel = document.getElementById("hourFilter").value;
   const { data, error } = await sb
-    .from("summoner_runs")
+    .from(BOT_CONFIGS[currentBot].runsTable)
     .select("*")
     .gte("started_at", rangeStartIso(hours))
     .order("started_at", { ascending: false })
@@ -359,7 +405,7 @@ async function editKeyCounts() {
 document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
 
 async function loadTrialCount() {
-  const { count } = await sb.from("summoner_trials").select("*", { count: "exact", head: true });
+  const { count } = await sb.from(BOT_CONFIGS[currentBot].trialsTable).select("*", { count: "exact", head: true });
   return count || 0;
 }
 
@@ -384,7 +430,12 @@ function renderStats(runs, trialCount) {
   document.getElementById("statRuns").textContent = runs.length;
   document.getElementById("statTrials").textContent = trialCount;
   document.getElementById("statAvgTime").textContent = avgDurationLabel(runs);
-  document.getElementById("statRunsPerKey").textContent = avgRunsPerKeyLabel(runs);
+  if (currentBot === "warlock") {
+    const stashFails = runs.filter(r => r.result === "stash_restart").length;
+    document.getElementById("statRunsPerKey").textContent = `🧟 ${_lastMercRevivals} · 🧺❌ ${stashFails}`;
+  } else {
+    document.getElementById("statRunsPerKey").textContent = avgRunsPerKeyLabel(runs);
+  }
 }
 
 // Pie chart of which arm the boss was actually found at, among runs where
@@ -603,6 +654,8 @@ const STOP_REASON_LABELS = {
   merc_died: "merc died",
   user_stopped: "stopped by user (F12)",
   portal_fail_limit: "too many portal failures",
+  wp_fail_limit: "too many WP failures",
+  body_not_picked_up: "body not picked up",
 };
 
 function stopReasonSuffix(trial) {
@@ -619,7 +672,7 @@ function timeAgo(iso) {
 
 async function loadMostRecentTrial() {
   const { data, error } = await sb
-    .from("summoner_trials")
+    .from(BOT_CONFIGS[currentBot].trialsTable)
     .select("*")
     .order("started_at", { ascending: false })
     .limit(1);
@@ -629,7 +682,7 @@ async function loadMostRecentTrial() {
 
 async function loadRunsForTrial(trialId) {
   const { data, error } = await sb
-    .from("summoner_runs")
+    .from(BOT_CONFIGS[currentBot].runsTable)
     .select("*")
     .eq("trial_id", trialId)
     .order("started_at", { ascending: false });
@@ -639,7 +692,7 @@ async function loadRunsForTrial(trialId) {
 
 async function loadTrialList() {
   const { data, error } = await sb
-    .from("summoner_trials")
+    .from(BOT_CONFIGS[currentBot].trialsTable)
     .select("*")
     .order("started_at", { ascending: false })
     .limit(100);
@@ -761,8 +814,9 @@ function renderLootTally(runs, elId) {
 }
 
 function renderTrialSummary(elId, runs, maxRuns) {
+  const base = `${runs.length} / ${maxRuns ?? "?"} runs — avg ${avgDurationLabel(runs)}/run`;
   document.getElementById(elId).textContent =
-    `${runs.length} / ${maxRuns ?? "?"} runs — avg ${avgDurationLabel(runs)}/run — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
+    currentBot === "warlock" ? base : `${base} — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
 }
 
 function pct(n, d) {
@@ -790,6 +844,93 @@ function renderRatioStats(elId, runs, mercRevivals) {
     `🧟 ${mercRevivals ?? 0}`;
 }
 
+// Warlock equivalent of renderRatioStats — mirrors gui_app.py's warlock
+// routine-message stats line exactly (stash ratio, WP ratio, merc revivals,
+// stash-not-found run count), no boss-arm concept.
+function renderWarlockRatioStats(elId, runs, mercRevivals) {
+  const total = runs.length;
+  const success = runs.filter(r => r.result === "success").length;
+  const stashRestart = runs.filter(r => r.result === "stash_restart").length;
+  const wpFail = runs.filter(r => r.result === "wp_fail").length;
+  const stashSuccess = runs.filter(r => r.stash_result === "success").length;
+  const stashFail = runs.filter(r => r.stash_result === "fail").length;
+  const stashTotal = stashSuccess + stashFail;
+  const wpTotal = success + wpFail; // stash_restart runs never attempt WP this run
+  document.getElementById(elId).textContent = total === 0 ? "" :
+    `✅ ${success}/${total} (${pct(success, total)}%) · ` +
+    `🌀 ${wpFail}/${wpTotal || 1} (${pct(wpFail, wpTotal || 1)}%) · ` +
+    `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
+    `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}`;
+}
+
+// Warlock equivalent of renderArmDetailHtml — no arm/direction table, just
+// stash result + loot list with scores.
+function renderWarlockDetailHtml(run) {
+  const lootRows = (run.loots || []).map(l =>
+    `<li>${lootItemHtml(l)}${(l.score !== undefined && l.score !== null) ? ` — ${l.score.toFixed(3)} (> ${l.threshold !== undefined && l.threshold !== null ? l.threshold.toFixed(2) : "?"})` : ""}</li>`
+  ).join("") || "<li>(none)</li>";
+  const stashLabel = run.stash_result === "success" ? "✅ success"
+    : run.stash_result === "fail" ? "❌ not found"
+    : "↷ bypass (nothing to deposit)";
+  return `
+    <div><strong>Stash:</strong> ${stashLabel}</div>
+    <div style="margin-top:8px;">
+      <strong>Loot:</strong>
+      <ul style="margin:4px 0 0 18px; padding:0;">${lootRows}</ul>
+    </div>
+  `;
+}
+
+// Warlock equivalent of renderRunFeed — status column instead of arm/method,
+// and wp_fail rows get the same simplified no-expand treatment portal_fail
+// rows get in the Summoner view (distinct from a generic failure icon).
+function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
+  const tbody = document.getElementById(tbodyId);
+  const expanded = new Set(
+    [...tbody.querySelectorAll(".detail-row")]
+      .filter(row => row.style.display !== "none")
+      .map(row => row.id)
+  );
+  tbody.innerHTML = "";
+  runs.forEach(r => {
+    const loot = (r.loots || []).map(l => lootRowIcon(l)).join(" ") || "-";
+    const detailId = `${idPrefix}${r.id}`;
+    const isWpFail = r.result === "wp_fail";
+    const isStashRestart = r.result === "stash_restart";
+
+    const summaryRow = document.createElement("tr");
+    if (isStashRestart) summaryRow.className = "key-row"; // reuse gold highlight as a distinct visual cue
+
+    if (isWpFail) {
+      summaryRow.innerHTML =
+        `<td data-label=""></td><td data-label="run">#${r.run_num}</td>` +
+        `<td data-label="status" style="color:#888780;" title="WP not found">🌀</td>` +
+        `<td data-label="loot">-</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
+    } else {
+      const statusIcon = isStashRestart
+        ? `<span title="stash not found — restarting run">🧺❌</span>`
+        : `<span title="success">✅</span>`;
+      summaryRow.innerHTML =
+        `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
+        `<td data-label="run">#${r.run_num}</td><td data-label="status">${statusIcon}</td>` +
+        `<td data-label="loot">${loot}</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
+    }
+    tbody.appendChild(summaryRow);
+
+    if (!isWpFail) {
+      const detailRow = document.createElement("tr");
+      detailRow.className = "detail-row";
+      detailRow.id = detailId;
+      detailRow.style.display = expanded.has(detailId) ? "" : "none";
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.innerHTML = renderWarlockDetailHtml(r);
+      detailRow.appendChild(td);
+      tbody.appendChild(detailRow);
+    }
+  });
+}
+
 async function refreshLive() {
   const trial = await loadMostRecentTrial();
   if (!trial) {
@@ -815,17 +956,35 @@ async function refreshLive() {
     inProgressEl.textContent = "";
   }
 
-  renderRatioStats("liveRatios", runs, trial.merc_revivals);
+  if (currentBot === "warlock") {
+    renderWarlockRatioStats("liveRatios", runs, trial.merc_revivals);
+  } else {
+    renderRatioStats("liveRatios", runs, trial.merc_revivals);
+  }
   renderLootTally(runs, "liveLootTally");
-  renderRunFeed("liveFeedBody", runs, "liveDetail");
+  if (currentBot === "warlock") {
+    renderWarlockRunFeed("liveFeedBody", runs, "liveDetail");
+  } else {
+    renderRunFeed("liveFeedBody", runs, "liveDetail");
+  }
 }
 
 let _lastHistoryRuns = [];
 async function refreshHistory() {
   const [runs, trialCount] = await Promise.all([loadRuns(), loadTrialCount()]);
   _lastHistoryRuns = runs;
+  if (currentBot === "warlock") {
+    // merc_revivals lives on warlock_trials, not per-run — sum it across
+    // trials whose started_at falls in the same range the run list used.
+    const trials = await loadTrialList();
+    const hours = parseInt(document.getElementById("rangeFilter").value, 10);
+    const startIso = rangeStartIso(hours);
+    _lastMercRevivals = trials
+      .filter(t => t.started_at >= startIso)
+      .reduce((sum, t) => sum + (t.merc_revivals || 0), 0);
+  }
   renderStats(runs, trialCount);
-  renderArmChart(runs);
+  if (BOT_CONFIGS[currentBot].hasArmChart) renderArmChart(runs);
   renderLootLineChart(runs);
   renderDurationChart(runs);
 }
@@ -866,7 +1025,11 @@ async function showTrialDetail(trialId) {
   renderTrialSummary("trialDetailProgress", runs, trial ? trial.max_runs : null);
   document.getElementById("trialDetailStopReason").textContent = trial ? stopReasonSuffix(trial).trim() : "";
   renderLootTally(runs, "trialDetailLootTally");
-  renderRunFeed("trialDetailBody", runs, "histDetail");
+  if (currentBot === "warlock") {
+    renderWarlockRunFeed("trialDetailBody", runs, "histDetail");
+  } else {
+    renderRunFeed("trialDetailBody", runs, "histDetail");
+  }
   const deleteBtn = document.getElementById("deleteTrialBtn");
   deleteBtn.style.display = "";
   deleteBtn.dataset.trialId = trialId;
@@ -892,7 +1055,7 @@ async function deleteTrial(trialId) {
   // was actually removed. Checking only `error` (as an earlier version of
   // this function did) misses this case entirely.
   const { data: deletedRuns, error: runsErr } =
-    await sb.from("summoner_runs").delete().eq("trial_id", trialId).select();
+    await sb.from(BOT_CONFIGS[currentBot].runsTable).delete().eq("trial_id", trialId).select();
   if (runsErr) {
     alert(`Delete failed (runs): ${runsErr.message}. Nothing was removed for ${trialId}.`);
     return;
@@ -906,7 +1069,7 @@ async function deleteTrial(trialId) {
     return;
   }
   const { data: deletedTrials, error: trialErr } =
-    await sb.from("summoner_trials").delete().eq("trial_id", trialId).select();
+    await sb.from(BOT_CONFIGS[currentBot].trialsTable).delete().eq("trial_id", trialId).select();
   if (trialErr) {
     alert(`Runs were deleted, but the trial record itself failed to delete: ${trialErr.message}. ` +
           `Trial ${trialId} will show with 0 runs until you delete it again.`);
@@ -933,13 +1096,33 @@ document.getElementById("rangeFilter").addEventListener("change", refreshHistory
 document.getElementById("hourFilter").addEventListener("change", refreshHistory);
 document.getElementById("lootGranularity").addEventListener("change", () => renderLootLineChart(_lastHistoryRuns));
 
-sb.channel("summoner_runs_live")
+function updateLiveStatusTs() {
+  document.getElementById("liveStatus").textContent = "live - updated " + new Date().toLocaleTimeString();
+}
+
+// One channel covers both bots' tables — each callback only refreshes if
+// the change pertains to whichever bot is currently selected, so switching
+// bots doesn't require re-subscribing.
+sb.channel("bot_runs_live")
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "summoner_runs" }, () => {
-    document.getElementById("liveStatus").textContent = "live - updated " + new Date().toLocaleTimeString();
+    if (currentBot !== "summoner") return;
+    updateLiveStatusTs();
+    refreshLive();
+    refreshHistory();
+  })
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "warlock_runs" }, () => {
+    if (currentBot !== "warlock") return;
+    updateLiveStatusTs();
     refreshLive();
     refreshHistory();
   })
   .on("postgres_changes", { event: "*", schema: "public", table: "summoner_trials" }, () => {
+    if (currentBot !== "summoner") return;
+    refreshLive();
+    populateTrialPicker();
+  })
+  .on("postgres_changes", { event: "*", schema: "public", table: "warlock_trials" }, () => {
+    if (currentBot !== "warlock") return;
     refreshLive();
     populateTrialPicker();
   })
@@ -964,6 +1147,7 @@ setupCollapsibleChartPanel("armChartPanel", () => chart);
 setupCollapsibleChartPanel("lootLineChartPanel", () => lootLineChart);
 setupCollapsibleChartPanel("durationChartPanel", () => durationChart);
 
+initBotUI();
 refreshLive();
 refreshHistory();
 populateTrialPicker();
