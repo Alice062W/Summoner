@@ -133,6 +133,8 @@
     <div>👹 Key of Terror (stash)</div>
     <div>🔥 Key of Hate (stash, bot-tracked)</div>
     <div>💀 Key of Destruction (stash)</div>
+    <div>🧟 Merc revived at the start of this run (Warlock)</div>
+    <div>🧺❌ Stash not found — run restarted (Warlock)</div>
   </div>
 </div>
 
@@ -1150,10 +1152,15 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
     const summaryRow = document.createElement("tr");
     if (isStashRestart) summaryRow.className = "key-row"; // reuse gold highlight as a distinct visual cue
 
+    // Merc revival is a separate pre-step, not a run outcome — shown as an
+    // extra icon alongside whatever status the run itself had (success/
+    // wp_fail/stash_restart), not in place of it.
+    const revivedIcon = r.merc_revived ? `<span title="merc revived at the start of this run">🧟</span> ` : "";
+
     if (isWpFail) {
       summaryRow.innerHTML =
         `<td data-label=""></td><td data-label="run">#${r.run_num}</td>` +
-        `<td data-label="status" style="color:#888780;" title="WP not found">🌀</td>` +
+        `<td data-label="status" style="color:#888780;" title="WP not found">${revivedIcon}🌀</td>` +
         `<td data-label="loot">-</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     } else {
       const statusIcon = isStashRestart
@@ -1161,7 +1168,7 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
         : `<span title="success">✅</span>`;
       summaryRow.innerHTML =
         `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
-        `<td data-label="run">#${r.run_num}</td><td data-label="status">${statusIcon}</td>` +
+        `<td data-label="run">#${r.run_num}</td><td data-label="status">${revivedIcon}${statusIcon}</td>` +
         `<td data-label="loot">${loot}</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     }
     tbody.appendChild(summaryRow);
