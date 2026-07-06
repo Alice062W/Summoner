@@ -6,6 +6,7 @@
 <title>Summoner bot dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@sgratzl/chartjs-chart-boxplot@4/build/index.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -223,6 +224,12 @@
     <canvas id="durationChart" height="180" style="margin-top:8px;"></canvas>
   </details>
 
+  <details class="panel" id="lootDurationChartPanel">
+    <summary><strong>Run duration by loot count</strong></summary>
+    <p style="margin:6px 0 0; font-size:12px; color:#a8916a;">Each box shows the run-duration distribution (min/quartiles/median/max) for success runs that collected that many loot items in the selected period above; dots beyond the whiskers are outlier runs.</p>
+    <canvas id="lootDurationChart" height="220" style="margin-top:8px;"></canvas>
+  </details>
+
   <details class="panel" id="armChartPanel">
     <summary><strong>Boss arm distribution (found runs only)</strong></summary>
     <canvas id="armChart" height="220" style="margin-top:8px;"></canvas>
@@ -246,6 +253,12 @@
 const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Registers the boxplot dataset type ('boxplot') this file's loot-duration
+// chart uses — https://github.com/sgratzl/chartjs-chart-boxplot. Loaded via
+// the <script> tag alongside Chart.js itself (see <head>), so both globals
+// already exist here.
+Chart.register(ChartBoxPlot.BoxPlotController, ChartBoxPlot.BoxAndWiskers);
 
 // Deterrent against accidental/casual deletion only — not real access
 // control. This constant is visible to anyone who views the page source,
@@ -358,6 +371,7 @@ function initBotUI() {
   document.getElementById("keyCountsPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("runeStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
+  document.getElementById("lootDurationChartPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
     ? `<tr><th></th><th>run</th><th>status</th><th>loot</th><th>when</th></tr>`
     : `<tr><th></th><th>run</th><th>arm</th><th>method</th><th>loot</th><th>when</th></tr>`;
@@ -926,6 +940,69 @@ function renderDurationChart(runs) {
   });
 }
 
+// Box-and-whisker of run duration per loot count, over the same
+// range/hour-filtered run list the rest of the History tab uses. Restricted
+// to "success" runs — stash_restart/wp_fail rows get cut short or padded by
+// retry logic unrelated to how much was looted, so mixing them in would
+// distort the very relationship this chart is meant to show. Outlier
+// detection (dots beyond the whiskers) is the boxplot library's own
+// standard 1.5x-IQR rule — no manual filtering needed, unlike the one-off
+// analysis this panel is based on.
+let lootDurationChart = null;
+function renderLootDurationChart(runs) {
+  if (currentBot !== "warlock") return;
+  const ctx = document.getElementById("lootDurationChart");
+  if (lootDurationChart) { lootDurationChart.destroy(); lootDurationChart = null; }
+
+  const byLootCount = new Map();
+  runs.filter(r => r.result === "success").forEach(r => {
+    const n = (r.loots || []).length;
+    const durMin = runDurationSeconds(r) / 60;
+    if (!Number.isFinite(durMin) || durMin < 0) return;
+    if (!byLootCount.has(n)) byLootCount.set(n, []);
+    byLootCount.get(n).push(durMin);
+  });
+  if (byLootCount.size === 0) return;
+
+  const loots = [...byLootCount.keys()].sort((a, b) => a - b);
+  const data = loots.map(n => byLootCount.get(n));
+  const counts = loots.map(n => byLootCount.get(n).length);
+
+  lootDurationChart = new Chart(ctx, {
+    type: "boxplot",
+    data: {
+      labels: loots.map(String),
+      datasets: [{
+        label: "Run duration (min)",
+        data,
+        backgroundColor: "rgba(55,138,221,0.25)",
+        borderColor: "#378ADD",
+        borderWidth: 1.5,
+        medianColor: "#0C447C",
+        outlierBackgroundColor: "#E24B4A",
+        outlierBorderColor: "#E24B4A",
+        outlierRadius: 3,
+        itemRadius: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: (item) => `n = ${counts[item.dataIndex]} run${counts[item.dataIndex] === 1 ? "" : "s"}`,
+          },
+        },
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: "run duration (minutes)" } },
+        x: { title: { display: true, text: "loot items collected" } },
+      },
+    },
+  });
+}
+
 const STOP_REASON_LABELS = {
   merc_died: "merc died",
   user_stopped: "stopped by user (F12)",
@@ -1294,6 +1371,7 @@ async function refreshHistory() {
   if (BOT_CONFIGS[currentBot].hasArmChart) renderArmChart(runs);
   renderLootLineChart(runs);
   renderDurationChart(runs);
+  renderLootDurationChart(runs);
   renderHistoryRuneStats();
 }
 
@@ -1456,6 +1534,7 @@ function setupCollapsibleChartPanel(panelId, getChart) {
 setupCollapsibleChartPanel("armChartPanel", () => chart);
 setupCollapsibleChartPanel("lootLineChartPanel", () => lootLineChart);
 setupCollapsibleChartPanel("durationChartPanel", () => durationChart);
+setupCollapsibleChartPanel("lootDurationChartPanel", () => lootDurationChart);
 
 initBotUI();
 refreshLive();
