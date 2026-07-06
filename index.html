@@ -224,6 +224,12 @@
     <canvas id="durationChart" height="180" style="margin-top:8px;"></canvas>
   </details>
 
+  <details class="panel" id="lootCountChartPanel">
+    <summary><strong>Loot count distribution</strong></summary>
+    <p style="margin:6px 0 0; font-size:12px; color:#a8916a;">Click a legend entry to show/hide that curve — only "All loots" is shown by default.</p>
+    <canvas id="lootCountChart" height="200" style="margin-top:8px;"></canvas>
+  </details>
+
   <details class="panel" id="lootDurationChartPanel">
     <summary><strong>Run duration by loot count</strong></summary>
     <p style="margin:6px 0 0; font-size:12px; color:#a8916a;">Each box shows the run-duration distribution (min/quartiles/median/max) for success runs that collected that many loot items in the selected period above; dots beyond the whiskers are outlier runs.</p>
@@ -371,6 +377,7 @@ function initBotUI() {
   document.getElementById("keyCountsPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("runeStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
+  document.getElementById("lootCountChartPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("lootDurationChartPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
     ? `<tr><th></th><th>run</th><th>status</th><th>loot</th><th>when</th></tr>`
@@ -940,6 +947,61 @@ function renderDurationChart(runs) {
   });
 }
 
+// Three toggleable curves — all loots, non-gold loots, gold loots — showing
+// what % of (success, range/hour-filtered) runs collected exactly N of that
+// category. "Non-gold" is every loot key except loot_gold; the split matters
+// because gold piles below the in-game filter threshold don't even render,
+// so this is the lever the loot-count-vs-duration chart above is really
+// about — same restriction to "success" runs and same reasoning as that
+// panel. Line + point (not the duration panel's KDE smoothing) since loot
+// count is a small discrete integer, not a continuous quantity.
+let lootCountChart = null;
+function renderLootCountChart(runs) {
+  if (currentBot !== "warlock") return;
+  const ctx = document.getElementById("lootCountChart");
+  if (lootCountChart) { lootCountChart.destroy(); lootCountChart = null; }
+
+  const successRuns = runs.filter(r => r.result === "success");
+  if (successRuns.length === 0) return;
+  const total = successRuns.length;
+
+  function countsFor(filterFn) {
+    const counts = new Map();
+    successRuns.forEach(r => {
+      const n = (r.loots || []).filter(filterFn).length;
+      counts.set(n, (counts.get(n) || 0) + 1);
+    });
+    return counts;
+  }
+
+  const allCounts     = countsFor(() => true);
+  const nonGoldCounts = countsFor(l => l.key !== "loot_gold");
+  const goldCounts    = countsFor(l => l.key === "loot_gold");
+
+  const maxN = Math.max(0, ...allCounts.keys(), ...nonGoldCounts.keys(), ...goldCounts.keys());
+  const labels = Array.from({ length: maxN + 1 }, (_, i) => i);
+  const toPct = (counts) => labels.map(n => Math.round((counts.get(n) || 0) / total * 1000) / 10);
+
+  lootCountChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: "All loots",       data: toPct(allCounts),     borderColor: "#378ADD", backgroundColor: "transparent", pointRadius: 3, tension: 0.2, hidden: false },
+        { label: "Non-gold loots",  data: toPct(nonGoldCounts), borderColor: "#1D9E75", backgroundColor: "transparent", pointRadius: 3, tension: 0.2, hidden: true },
+        { label: "Gold loots",      data: toPct(goldCounts),    borderColor: "#E0A23C", backgroundColor: "transparent", pointRadius: 3, tension: 0.2, hidden: true },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: "% of runs" }, ticks: { callback: v => v + "%" } },
+        x: { title: { display: true, text: "loot items collected" } },
+      },
+    },
+  });
+}
+
 // Box-and-whisker of run duration per loot count, over the same
 // range/hour-filtered run list the rest of the History tab uses. Restricted
 // to "success" runs — stash_restart/wp_fail rows get cut short or padded by
@@ -1371,6 +1433,7 @@ async function refreshHistory() {
   if (BOT_CONFIGS[currentBot].hasArmChart) renderArmChart(runs);
   renderLootLineChart(runs);
   renderDurationChart(runs);
+  renderLootCountChart(runs);
   renderLootDurationChart(runs);
   renderHistoryRuneStats();
 }
@@ -1534,6 +1597,7 @@ function setupCollapsibleChartPanel(panelId, getChart) {
 setupCollapsibleChartPanel("armChartPanel", () => chart);
 setupCollapsibleChartPanel("lootLineChartPanel", () => lootLineChart);
 setupCollapsibleChartPanel("durationChartPanel", () => durationChart);
+setupCollapsibleChartPanel("lootCountChartPanel", () => lootCountChart);
 setupCollapsibleChartPanel("lootDurationChartPanel", () => lootDurationChart);
 
 initBotUI();
