@@ -1112,8 +1112,28 @@ function renderWarlockRatioStats(elId, runs, mercRevivals) {
     `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}`;
 }
 
+// Renders every individual template-match attempt behind a stash/WP result
+// (see behaviors/warlock_logic.py _open_and_deposit_warlock / _open_wp_warlock)
+// — normally a single ✅ entry, more when a rescan/nudge/retry was needed.
+// Returns "" (renders nothing) when scans is empty, e.g. stash bypassed.
+function renderScanListHtml(scans, label) {
+  if (!scans || scans.length === 0) return "";
+  const rows = scans.map(s => {
+    const icon = s.found ? "✅" : "❌";
+    const score = (s.score !== undefined && s.score !== null) ? s.score.toFixed(3) : "?";
+    const thr = (s.threshold !== undefined && s.threshold !== null) ? s.threshold.toFixed(2) : "?";
+    return `<li>${icon} ${s.label || label} — ${score} (> ${thr})</li>`;
+  }).join("");
+  return `
+    <div style="margin-top:8px;">
+      <strong>${label} scans</strong> (${scans.length}):
+      <ul style="margin:4px 0 0 18px; padding:0;">${rows}</ul>
+    </div>
+  `;
+}
+
 // Warlock equivalent of renderArmDetailHtml — no arm/direction table, just
-// stash result + loot list with scores.
+// stash result + scan history + loot list with scores.
 function renderWarlockDetailHtml(run) {
   const lootRows = (run.loots || []).map(l =>
     `<li>${lootItemHtml(l)}${(l.score !== undefined && l.score !== null) ? ` — ${l.score.toFixed(3)} (> ${l.threshold !== undefined && l.threshold !== null ? l.threshold.toFixed(2) : "?"})` : ""}</li>`
@@ -1125,6 +1145,8 @@ function renderWarlockDetailHtml(run) {
   return `
     <div><strong>Stash:</strong> ${stashLabel}</div>
     <div style="margin-top:4px;"><strong>Time used:</strong> ${durationLabel}</div>
+    ${renderScanListHtml(run.stash_scans, "Stash")}
+    ${renderScanListHtml(run.wp_scans, "WP")}
     <div style="margin-top:8px;">
       <strong>Loot:</strong>
       <ul style="margin:4px 0 0 18px; padding:0;">${lootRows}</ul>
@@ -1132,9 +1154,10 @@ function renderWarlockDetailHtml(run) {
   `;
 }
 
-// Warlock equivalent of renderRunFeed — status column instead of arm/method,
-// and wp_fail rows get the same simplified no-expand treatment portal_fail
-// rows get in the Summoner view (distinct from a generic failure icon).
+// Warlock equivalent of renderRunFeed — status column instead of arm/method.
+// wp_fail rows still get an expandable detail row (unlike Summoner's
+// portal_fail) since their stash/WP scan history is exactly what's needed
+// to diagnose why the WP wasn't found.
 function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
   const tbody = document.getElementById(tbodyId);
   const expanded = new Set(
@@ -1159,7 +1182,8 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
 
     if (isWpFail) {
       summaryRow.innerHTML =
-        `<td data-label=""></td><td data-label="run">#${r.run_num}</td>` +
+        `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
+        `<td data-label="run">#${r.run_num}</td>` +
         `<td data-label="status" style="color:#888780;" title="WP not found">${revivedIcon}🌀</td>` +
         `<td data-label="loot">-</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     } else {
@@ -1173,17 +1197,15 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
     }
     tbody.appendChild(summaryRow);
 
-    if (!isWpFail) {
-      const detailRow = document.createElement("tr");
-      detailRow.className = "detail-row";
-      detailRow.id = detailId;
-      detailRow.style.display = expanded.has(detailId) ? "" : "none";
-      const td = document.createElement("td");
-      td.colSpan = 5;
-      td.innerHTML = renderWarlockDetailHtml(r);
-      detailRow.appendChild(td);
-      tbody.appendChild(detailRow);
-    }
+    const detailRow = document.createElement("tr");
+    detailRow.className = "detail-row";
+    detailRow.id = detailId;
+    detailRow.style.display = expanded.has(detailId) ? "" : "none";
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.innerHTML = renderWarlockDetailHtml(r);
+    detailRow.appendChild(td);
+    tbody.appendChild(detailRow);
   });
 }
 
