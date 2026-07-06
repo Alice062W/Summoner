@@ -1261,9 +1261,16 @@ function renderRatioStats(elId, runs, mercRevivals) {
     `🧟 ${mercRevivals ?? 0}`;
 }
 
-// Warlock equivalent of renderRatioStats — mirrors gui_app.py's warlock
-// routine-message stats line exactly (stash ratio, WP ratio, merc revivals,
-// stash-not-found run count), no boss-arm concept.
+// Warlock equivalent of renderRatioStats. `result` is a mutually exclusive,
+// exhaustive 3-way split of every run (success / wp_fail / stash_restart),
+// so ✅/🌀/🧺❌ all share the same denominator (total) — their percentages
+// sum to 100%, showing each outcome's share of the whole run pool. 📥 is a
+// different question (stash deposit outcome, not run outcome) so it keeps
+// its own denominator (bypassed runs excluded, same as before).
+// Note: gui_app.py's Discord routine message still uses the older
+// attempted-only denominator for 🌀 (excludes stash_restart runs from the
+// WP total) — this dashboard function intentionally no longer mirrors it
+// 1:1; update gui_app.py too (needs a bot rebuild) if you want them to match.
 function renderWarlockRatioStats(elId, runs, mercRevivals) {
   const total = runs.length;
   const success = runs.filter(r => r.result === "success").length;
@@ -1272,12 +1279,11 @@ function renderWarlockRatioStats(elId, runs, mercRevivals) {
   const stashSuccess = runs.filter(r => r.stash_result === "success").length;
   const stashFail = runs.filter(r => r.stash_result === "fail").length;
   const stashTotal = stashSuccess + stashFail;
-  const wpTotal = success + wpFail; // stash_restart runs never attempt WP this run
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
-    `🌀 ${wpFail}/${wpTotal || 1} (${pct(wpFail, wpTotal || 1)}%) · ` +
+    `🌀 ${wpFail}/${total} (${pct(wpFail, total)}%) · ` +
     `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
-    `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}`;
+    `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}/${total} (${pct(stashRestart, total)}%)`;
 }
 
 // Renders every individual template-match attempt behind a stash/WP result
