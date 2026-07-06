@@ -194,8 +194,9 @@
 
   <div id="historyRuneStatsPanel" class="panel" style="display:none;">
     <strong>🪨 Runes Collected (selected period above)</strong>
-    <p style="margin:4px 0 0; font-size:12px; color:#5f5e5a;">Total of each rune picked up within the date-range/hour filters above — not the current stash contents.</p>
+    <p style="margin:4px 0 0; font-size:12px; color:#5f5e5a;">Total of each rune, gold, and loot type collected within the date-range/hour filters above — not the current stash contents.</p>
     <div class="rune-grid" id="historyRuneGrid"></div>
+    <div class="loot-tally" id="historyLootTally"></div>
   </div>
 
   <div class="cards">
@@ -487,12 +488,40 @@ function renderRuneInventory(row, trialProgress) {
 // warlock_rune_events log the Pul+/Sub-Pul loot-statistics curves use.
 // Distinct meaning from the Live tab's table above: this is a historical
 // sum over a period, not the stash's current contents.
+//
+// Also folds in, for the same selected period:
+//  - Total gold collected: summed from warlock_trials.gold_collected (the
+//    same per-trial "collected so far this trial" cumulative field the Live
+//    tab's gold box reads — see supabase/migrations/0008_warlock_trial_progress.sql),
+//    filtered the same way _lastMercRevivals already is in refreshHistory()
+//    (range via started_at, plus hour-of-day bucket for the "time slot"
+//    filter). Note: like _lastMercRevivals, this reads from loadTrialList()'s
+//    100-row cap — if a period has more than 100 trials, older ones outside
+//    that cap won't be counted.
+//  - Loot-type totals: reuses renderLootTally as-is against _lastHistoryRuns,
+//    which refreshHistory() already populates via the same range/hour-filtered
+//    loadRuns() the run list and other History charts use.
 async function renderHistoryRuneStats() {
   if (currentBot !== "warlock") return;
   const events = await loadRuneEvents();
   const totals = {};
   events.forEach(ev => { totals[ev.rune] = (totals[ev.rune] || 0) + ev.delta; });
   renderRuneGrid("historyRuneGrid", totals, { highlightSelf: true });
+
+  const hours = parseInt(document.getElementById("rangeFilter").value, 10);
+  const hourSel = document.getElementById("hourFilter").value;
+  const startIso = rangeStartIso(hours);
+  const trials = await loadTrialList();
+  const goldTotal = trials
+    .filter(t => t.started_at >= startIso &&
+      (hourSel === "all" || hourBucket(new Date(t.started_at).getHours()) === hourSel))
+    .reduce((sum, t) => sum + (t.gold_collected || 0), 0);
+  document.getElementById("historyRuneGrid").innerHTML += `<div class="rune-gold-box" style="grid-row:4; grid-column:3 / span 5;">
+    <p class="rune-gold-label">💰 Gold collected (selected period)</p>
+    <p class="rune-gold-amount">${goldTotal.toLocaleString()}</p>
+  </div>`;
+
+  renderLootTally(_lastHistoryRuns, "historyLootTally");
 }
 
 async function refreshRuneInventory() {
