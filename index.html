@@ -598,9 +598,14 @@ async function loadTrialCount() {
   return count || 0;
 }
 
+// Existing per-run callers never exceed a few minutes, so the "h" part was
+// never needed until the trial-total-duration use — added here rather than
+// as a separate formatter so a many-hour trial doesn't render as "375m 5s".
 function fmtSeconds(s) {
-  const m = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const r = Math.round(s % 60);
+  if (h > 0) return `${h}h ${m}m ${r}s`;
   return m > 0 ? `${m}m ${r}s` : `${r}s`;
 }
 
@@ -1142,9 +1147,11 @@ function renderArmDetailHtml(run) {
   const lootRows = (run.loots || []).map(l =>
     `<li>${lootItemHtml(l)}${(l.score !== undefined && l.score !== null) ? ` — ${l.score.toFixed(3)} (> ${l.threshold !== undefined && l.threshold !== null ? l.threshold.toFixed(2) : "?"})` : ""}</li>`
   ).join("") || "<li>(none)</li>";
+  const startedLabel = run.started_at ? new Date(run.started_at).toLocaleString() : "?";
 
   return `
-    <div>
+    <div><strong>Started:</strong> ${startedLabel}</div>
+    <div style="margin-top:8px;">
       <strong>Arm scores</strong> (thresh: b≥${run.base_thresh ?? "?"} / p≥${run.pillar_thresh ?? "?"})
       <table><thead><tr><th class="arm-cell">arm</th><th class="arm-cell">base</th><th class="arm-cell">pillar</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1230,10 +1237,20 @@ function renderLootTally(runs, elId) {
   }
 }
 
-function renderTrialSummary(elId, runs, maxRuns) {
+// trial param is optional (only the Live tab passes it) — when given, appends
+// the trial's total duration: ended_at - started_at once finished, or
+// now - started_at while still running, so it keeps growing as the trial
+// progresses (updates on the same new-run cadence as the rest of this box,
+// via the postgres_changes subscription below — no separate polling needed).
+function renderTrialSummary(elId, runs, maxRuns, trial = null) {
   const base = `${runs.length} / ${maxRuns ?? "?"} runs — avg ${avgDurationLabel(runs)}/run`;
-  document.getElementById(elId).textContent =
-    currentBot === "warlock" ? base : `${base} — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
+  let text = currentBot === "warlock" ? base : `${base} — avg ${avgRunsPerKeyLabel(runs)} runs/key`;
+  if (trial && trial.started_at) {
+    const endTime = trial.ended_at ? new Date(trial.ended_at) : new Date();
+    const totalSec = (endTime - new Date(trial.started_at)) / 1000;
+    text += ` — total ${fmtSeconds(totalSec)}`;
+  }
+  document.getElementById(elId).textContent = text;
 }
 
 function pct(n, d) {
@@ -1316,8 +1333,10 @@ function renderWarlockDetailHtml(run) {
     : run.stash_result === "fail" ? "❌ not found"
     : "↷ bypass (nothing to deposit)";
   const durationLabel = fmtSeconds((new Date(run.ended_at) - new Date(run.started_at)) / 1000);
+  const startedLabel = run.started_at ? new Date(run.started_at).toLocaleString() : "?";
   return `
-    <div><strong>Stash:</strong> ${stashLabel}</div>
+    <div><strong>Started:</strong> ${startedLabel}</div>
+    <div style="margin-top:4px;"><strong>Stash:</strong> ${stashLabel}</div>
     <div style="margin-top:4px;"><strong>Time used:</strong> ${durationLabel}</div>
     ${renderScanListHtml(run.stash_scans, "Stash")}
     ${renderScanListHtml(run.wp_scans, "WP")}
@@ -1399,7 +1418,7 @@ async function refreshLive() {
     (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id + stopReasonSuffix(trial);
 
   const runs = await loadRunsForTrial(trial.trial_id);
-  renderTrialSummary("liveProgress", runs, trial.max_runs);
+  renderTrialSummary("liveProgress", runs, trial.max_runs, trial);
 
   const inProgressEl = document.getElementById("liveInProgress");
   if (isRunning && trial.max_runs && runs.length < trial.max_runs) {
