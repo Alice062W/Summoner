@@ -134,7 +134,7 @@
     <div>👹 Key of Terror (stash)</div>
     <div>🔥 Key of Hate (stash, bot-tracked)</div>
     <div>💀 Key of Destruction (stash)</div>
-    <div>🧟 Merc revived at the start of this run (Warlock)</div>
+    <div>🧟 Merc revived at the start of this run — one icon per attempt made (Summoner/Warlock)</div>
     <div>🧺❌ Stash not found — run restarted (Warlock)</div>
   </div>
 </div>
@@ -1148,9 +1148,11 @@ function renderArmDetailHtml(run) {
     `<li>${lootItemHtml(l)}${(l.score !== undefined && l.score !== null) ? ` — ${l.score.toFixed(3)} (> ${l.threshold !== undefined && l.threshold !== null ? l.threshold.toFixed(2) : "?"})` : ""}</li>`
   ).join("") || "<li>(none)</li>";
   const startedLabel = run.started_at ? new Date(run.started_at).toLocaleString() : "?";
+  const durationLabel = fmtSeconds((new Date(run.ended_at) - new Date(run.started_at)) / 1000);
 
   return `
     <div><strong>Started:</strong> ${startedLabel}</div>
+    <div style="margin-top:4px;"><strong>Time used:</strong> ${durationLabel}</div>
     <div style="margin-top:8px;">
       <strong>Arm scores</strong> (thresh: b≥${run.base_thresh ?? "?"} / p≥${run.pillar_thresh ?? "?"})
       <table><thead><tr><th class="arm-cell">arm</th><th class="arm-cell">base</th><th class="arm-cell">pillar</th></tr></thead>
@@ -1161,6 +1163,7 @@ function renderArmDetailHtml(run) {
       <strong>Stash:</strong> ${run.stash_result ?? "n/a"}
       &nbsp;&nbsp;<strong>Portal fail:</strong> ${run.portal_fail ? "yes" : "no"}
       &nbsp;&nbsp;<strong>Merc died:</strong> ${run.merc_died ? "yes" : "no"}
+      &nbsp;&nbsp;<strong>Merc revival attempts:</strong> ${run.merc_revival_attempts ?? 0}
     </div>
     <div style="margin-top:8px;">
       <strong>Loot:</strong>
@@ -1189,17 +1192,25 @@ function renderRunFeed(tbodyId, runs, idPrefix) {
 
     const hasKey = (r.loots || []).some(l => l.is_key);
 
+    // Merc revival is a separate pre-step, not a run outcome — shown as
+    // one 🧟 per attempt made before this run (e.g. a failed attempt
+    // followed by a successful one shows as 🧟🧟), alongside whatever
+    // status the run itself had.
+    const revivedIcon = r.merc_revival_attempts
+      ? `<span title="${r.merc_revival_attempts} merc revival attempt(s) before this run">${"🧟".repeat(r.merc_revival_attempts)}</span> `
+      : "";
+
     const summaryRow = document.createElement("tr");
     if (hasKey) summaryRow.className = "key-row";
     if (isPortalFail) {
       summaryRow.innerHTML =
         `<td data-label=""></td><td data-label="run">#${r.run_num}</td>` +
-        `<td colspan="2" data-label="result" style="color:#888780;" title="portal not found">🌀</td>` +
+        `<td colspan="2" data-label="result" style="color:#888780;" title="portal not found">${revivedIcon}🌀</td>` +
         `<td data-label="loot">-</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     } else {
       summaryRow.innerHTML =
         `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
-        `<td data-label="run">#${r.run_num}</td><td data-label="arm">${armIcon(r.found_direction)}</td>` +
+        `<td data-label="run">#${r.run_num}</td><td data-label="arm">${revivedIcon}${armIcon(r.found_direction)}</td>` +
         `<td data-label="method">${methodIcon(r.found_method)}</td><td data-label="loot">${loot}</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     }
     tbody.appendChild(summaryRow);
