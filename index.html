@@ -46,7 +46,7 @@
   .legend-grid .status-dot { margin-right: 0; }
   details.panel summary { font-family: 'Cinzel', serif; cursor: pointer; }
   .key-counts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
-  .key-count-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 10px; text-align: center; }
+  .key-count-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 10px; text-align: center; position: relative; }
   .key-count-box p:first-child { font-size: 12px; color: #a8916a; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
   .key-count-box p:last-child { font-size: 28px; font-weight: 700; margin: 0; color: #f0d878; }
   .key-count-box.hate { background: linear-gradient(160deg, #3a2410, #1c1610); border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.45), inset 0 0 14px rgba(201,162,39,0.15); }
@@ -135,7 +135,7 @@
     </div>
     <div class="key-counts-grid">
       <div class="key-count-box"><p>👹 Terror</p><p id="keyTerror">-</p></div>
-      <div class="key-count-box hate"><p>🔥 Hate</p><p id="keyHate">-</p></div>
+      <div class="key-count-box hate"><span id="keyHateBadge" class="rune-collected-badge" style="display:none;"></span><p>🔥 Hate</p><p id="keyHate">-</p></div>
       <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
     </div>
   </div>
@@ -1482,10 +1482,32 @@ async function refreshLive() {
     renderRatioStats("liveRatios", runs, trial.merc_revivals);
   }
   renderLootTally(runs, "liveLootTally");
+  renderKeyHateBadge(runs);
   if (currentBot === "warlock") {
     renderWarlockRunFeed("liveFeedBody", runs, "liveDetail");
   } else {
     renderRunFeed("liveFeedBody", runs, "liveDetail");
+  }
+}
+
+// Live tab's "+N" badge on the Hate key box (mirrors Warlock's
+// rune-collected-badge on the rune grid) — sums is_key loot items across
+// the current trial's already-fetched runs, so no extra query is needed.
+// Summoner-only (Warlock doesn't farm keys); hidden once the badge would
+// read +0, same as the rune badges only appearing for runes actually
+// collected this trial.
+function renderKeyHateBadge(runs) {
+  const badge = document.getElementById("keyHateBadge");
+  if (currentBot !== "summoner") {
+    badge.style.display = "none";
+    return;
+  }
+  const collected = runs.reduce((sum, r) => sum + (r.loots || []).filter(l => l.is_key).length, 0);
+  if (collected > 0) {
+    badge.textContent = `+${collected}`;
+    badge.style.display = "";
+  } else {
+    badge.style.display = "none";
   }
 }
 
