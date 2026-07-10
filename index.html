@@ -95,17 +95,6 @@
   <button class="tab-btn" id="legendToggleBtn" onclick="toggleLegend()" style="float:right;">ⓘ Legend</button>
 </div>
 
-<div id="keyCountsPanel" class="panel">
-  <div style="display:flex; align-items:center; justify-content:space-between;">
-    <strong>🗝️ Keys Collected (all trials)</strong>
-  </div>
-  <div class="key-counts-grid">
-    <div class="key-count-box"><p>👹 Terror</p><p id="keyTerror">-</p></div>
-    <div class="key-count-box hate"><p>🔥 Hate</p><p id="keyHate">-</p></div>
-    <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
-  </div>
-</div>
-
 <div id="legendPanel" class="panel" style="display:none;">
   <p><strong>Icon legend</strong></p>
   <div class="legend-grid">
@@ -139,6 +128,18 @@
 </div>
 
 <div id="liveTabPanel">
+  <div id="keyCountsPanel" class="panel">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <strong>🗝️ Stash Keys</strong>
+      <button id="editKeysBtn" style="cursor:pointer; border:1px solid #4a3a24; background:#221a12; color:#c9a227; padding:4px 10px; border-radius:6px; font-size:13px;">✏️ Edit</button>
+    </div>
+    <div class="key-counts-grid">
+      <div class="key-count-box"><p>👹 Terror</p><p id="keyTerror">-</p></div>
+      <div class="key-count-box hate"><p>🔥 Hate</p><p id="keyHate">-</p></div>
+      <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
+    </div>
+  </div>
+
   <div id="runeStatsPanel" class="panel" style="display:none;">
     <div style="display:flex; align-items:center; justify-content:space-between;">
       <strong>🪨 Stash Runes (live — current stash totals)</strong>
@@ -190,6 +191,16 @@
       <option value="evening">Evening (18-24)</option>
       <option value="night">Night (0-6)</option>
     </select>
+  </div>
+
+  <div id="historyKeyCountsPanel" class="panel">
+    <strong>🗝️ Keys Collected (all trials)</strong>
+    <p style="margin:4px 0 0; font-size:12px; color:#5f5e5a;">Sum of every key picked up across every trial's run history — not the current stash contents, and not editable.</p>
+    <div class="key-counts-grid">
+      <div class="key-count-box"><p>👹 Terror</p><p id="historyKeyTerror">-</p></div>
+      <div class="key-count-box hate"><p>🔥 Hate</p><p id="historyKeyHate">-</p></div>
+      <div class="key-count-box"><p>💀 Destruction</p><p id="historyKeyDestruction">-</p></div>
+    </div>
   </div>
 
   <div id="historyRuneStatsPanel" class="panel" style="display:none;">
@@ -372,8 +383,10 @@ function initBotUI() {
   document.getElementById("armChartPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("statCard4Label").textContent = isWarlock ? "Merc rev. / Stash fails" : "Avg runs / key";
   // Warlock tracks stash runes instead of the manually-edited stash keys —
-  // Summoner has no rune OCR pipeline, so it keeps the key-counts panel.
+  // Summoner has no rune OCR pipeline, so it keeps the key-counts panels
+  // (manually-edited on Live, data-driven total on History).
   document.getElementById("keyCountsPanel").style.display = isWarlock ? "none" : "";
+  document.getElementById("historyKeyCountsPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("runeStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("lootCountChartPanel").style.display = isWarlock ? "" : "none";
@@ -423,19 +436,13 @@ async function loadRuns() {
   return data.filter(r => hourBucket(new Date(r.started_at).getHours()) === hourSel);
 }
 
-// Data-driven — sums is_key loot items across every run in every trial via
-// the total_keys_collected() Postgres function (supabase/migrations/
-// 0013_summoner_total_keys_collected.sql), computed server-side straight
-// from summoner_runs.loots. Replaces the old key_counts table, which the
-// user could overwrite via a manual edit prompt — this panel is no longer
-// editable, only ever reflects what the bot actually recorded. Summoner
-// can't tell key subtypes apart on the ground (single generic
-// loot_key_all template), so every collected key is shown as Hate;
-// Terror/Destruction are always 0.
+// Live tab — manually-tracked physical stash key inventory (across all
+// characters/sources, not just this bot), editable via editKeyCounts()
+// below. Separate concept from the History tab's data-driven total.
 async function loadKeyCounts() {
-  const { data, error } = await sb.rpc("total_keys_collected");
-  if (error || data === null) return { terror: 0, hate: 0, destruction: 0 };
-  return { terror: 0, hate: data, destruction: 0 };
+  const { data, error } = await sb.from("key_counts").select("*").eq("id", 1).limit(1);
+  if (error || !data || data.length === 0) return { terror: 0, hate: 0, destruction: 0 };
+  return data[0];
 }
 
 function renderKeyCounts(counts) {
@@ -446,6 +453,29 @@ function renderKeyCounts(counts) {
 
 async function refreshKeyCounts() {
   renderKeyCounts(await loadKeyCounts());
+}
+
+// History tab — data-driven, sums is_key loot items across every run in
+// every trial via the total_keys_collected() Postgres function (supabase/
+// migrations/0013_summoner_total_keys_collected.sql), computed server-side
+// straight from summoner_runs.loots. Not editable — always reflects what
+// the bot actually recorded. Summoner can't tell key subtypes apart on the
+// ground (single generic loot_key_all template), so every collected key is
+// shown as Hate; Terror/Destruction are always 0.
+async function loadTotalKeysCollected() {
+  const { data, error } = await sb.rpc("total_keys_collected");
+  if (error || data === null) return { terror: 0, hate: 0, destruction: 0 };
+  return { terror: 0, hate: data, destruction: 0 };
+}
+
+function renderHistoryKeyCounts(counts) {
+  document.getElementById("historyKeyTerror").textContent = counts.terror;
+  document.getElementById("historyKeyHate").textContent = counts.hate;
+  document.getElementById("historyKeyDestruction").textContent = counts.destruction;
+}
+
+async function refreshHistoryKeyCounts() {
+  renderHistoryKeyCounts(await loadTotalKeysCollected());
 }
 
 async function loadRuneInventory() {
@@ -558,6 +588,48 @@ async function refreshRuneInventory() {
   const [row, trial] = await Promise.all([loadRuneInventory(), loadMostRecentTrial()]);
   renderRuneInventory(row, trial);
 }
+
+async function editKeyCounts() {
+  const entered = prompt("Enter passphrase to edit key counts:");
+  if (entered === null) return;
+  if (entered !== DELETE_PASSPHRASE) {
+    alert("Incorrect passphrase — nothing changed.");
+    return;
+  }
+  const current = await loadKeyCounts();
+  const terrorStr = prompt("Key of Terror count:", current.terror);
+  if (terrorStr === null) return;
+  const hateStr = prompt("Key of Hate count:", current.hate);
+  if (hateStr === null) return;
+  const destructionStr = prompt("Key of Destruction count:", current.destruction);
+  if (destructionStr === null) return;
+  const terror = parseInt(terrorStr, 10);
+  const hate = parseInt(hateStr, 10);
+  const destruction = parseInt(destructionStr, 10);
+  if ([terror, hate, destruction].some(n => !Number.isInteger(n) || n < 0)) {
+    alert("All three values must be whole numbers ≥ 0 — nothing changed.");
+    return;
+  }
+  const { data, error } = await sb.from("key_counts")
+    .update({ terror, hate, destruction, updated_at: new Date().toISOString() })
+    .eq("id", 1)
+    .select();
+  if (error) {
+    alert(`Update failed: ${error.message}`);
+    return;
+  }
+  if (!data || data.length === 0) {
+    alert(
+      "Update request succeeded but changed 0 rows — this usually means the " +
+      "key_counts update policy hasn't been added yet " +
+      "(see supabase/migrations/0004_key_counts.sql) — nothing was changed."
+    );
+    return;
+  }
+  renderKeyCounts(data[0]);
+}
+
+document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
 
 async function loadTrialCount() {
   const { count } = await sb.from(BOT_CONFIGS[currentBot].trialsTable).select("*", { count: "exact", head: true });
@@ -1421,6 +1493,7 @@ let _lastHistoryRuns = [];
 async function refreshHistory() {
   const [runs, trialCount] = await Promise.all([loadRuns(), loadTrialCount()]);
   _lastHistoryRuns = runs;
+  if (currentBot === "summoner") refreshHistoryKeyCounts();
   if (currentBot === "warlock") {
     // merc_revivals lives on warlock_trials, not per-run — sum it across
     // trials whose started_at falls in the same range the run list used.
@@ -1559,8 +1632,7 @@ sb.channel("bot_runs_live")
     if (currentBot !== "summoner") return;
     updateLiveStatusTs();
     refreshLive();
-    refreshHistory();
-    refreshKeyCounts();   // total_keys_collected() is derived from this table
+    refreshHistory();   // also refreshes the History tab's data-driven key total
   })
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "warlock_runs" }, () => {
     if (currentBot !== "warlock") return;
@@ -1579,6 +1651,7 @@ sb.channel("bot_runs_live")
     populateTrialPicker();
     refreshRuneInventory();   // gold_collected/rune_pickups live on this row too
   })
+  .on("postgres_changes", { event: "*", schema: "public", table: "key_counts" }, refreshKeyCounts)
   .on("postgres_changes", { event: "*", schema: "public", table: "warlock_rune_inventory" }, refreshRuneInventory)
   .subscribe();
 
@@ -1615,10 +1688,14 @@ refreshRuneInventory();
 // fallback that doesn't depend on the websocket connection at all — it
 // just re-fetches and re-renders the Live tab every 15s, same as a manual
 // refresh would, so a missed push is corrected automatically within 15s.
-// refreshKeyCounts is included here too: it's a plain RPC call (see
-// total_keys_collected(), migration 0013), not a realtime-subscribed
-// table, so this poll is what keeps the "Keys Collected" panel current as
-// new runs come in.
+// refreshKeyCounts (Live tab's manually-edited stash panel) is included
+// here too: key_counts was created via raw SQL (migration 0004) rather
+// than the table editor, so it may not be part of the supabase_realtime
+// publication — this poll keeps it self-healing even if the websocket
+// event for it never fires. The History tab's data-driven key total
+// (refreshHistoryKeyCounts) doesn't need its own poll — it's refreshed
+// whenever refreshHistory() runs (tab switch, filter change, or a new
+// summoner_runs row arriving via realtime above).
 setInterval(() => {
   refreshLive();
   refreshKeyCounts();
