@@ -97,8 +97,7 @@
 
 <div id="keyCountsPanel" class="panel">
   <div style="display:flex; align-items:center; justify-content:space-between;">
-    <strong>🗝️ Stash Keys</strong>
-    <button id="editKeysBtn" style="cursor:pointer; border:1px solid #4a3a24; background:#221a12; color:#c9a227; padding:4px 10px; border-radius:6px; font-size:13px;">✏️ Edit</button>
+    <strong>🗝️ Keys Collected (all trials)</strong>
   </div>
   <div class="key-counts-grid">
     <div class="key-count-box"><p>👹 Terror</p><p id="keyTerror">-</p></div>
@@ -424,10 +423,19 @@ async function loadRuns() {
   return data.filter(r => hourBucket(new Date(r.started_at).getHours()) === hourSel);
 }
 
+// Data-driven — sums is_key loot items across every run in every trial via
+// the total_keys_collected() Postgres function (supabase/migrations/
+// 0013_summoner_total_keys_collected.sql), computed server-side straight
+// from summoner_runs.loots. Replaces the old key_counts table, which the
+// user could overwrite via a manual edit prompt — this panel is no longer
+// editable, only ever reflects what the bot actually recorded. Summoner
+// can't tell key subtypes apart on the ground (single generic
+// loot_key_all template), so every collected key is shown as Hate;
+// Terror/Destruction are always 0.
 async function loadKeyCounts() {
-  const { data, error } = await sb.from("key_counts").select("*").eq("id", 1).limit(1);
-  if (error || !data || data.length === 0) return { terror: 0, hate: 0, destruction: 0 };
-  return data[0];
+  const { data, error } = await sb.rpc("total_keys_collected");
+  if (error || data === null) return { terror: 0, hate: 0, destruction: 0 };
+  return { terror: 0, hate: data, destruction: 0 };
 }
 
 function renderKeyCounts(counts) {
@@ -550,48 +558,6 @@ async function refreshRuneInventory() {
   const [row, trial] = await Promise.all([loadRuneInventory(), loadMostRecentTrial()]);
   renderRuneInventory(row, trial);
 }
-
-async function editKeyCounts() {
-  const entered = prompt("Enter passphrase to edit key counts:");
-  if (entered === null) return;
-  if (entered !== DELETE_PASSPHRASE) {
-    alert("Incorrect passphrase — nothing changed.");
-    return;
-  }
-  const current = await loadKeyCounts();
-  const terrorStr = prompt("Key of Terror count:", current.terror);
-  if (terrorStr === null) return;
-  const hateStr = prompt("Key of Hate count:", current.hate);
-  if (hateStr === null) return;
-  const destructionStr = prompt("Key of Destruction count:", current.destruction);
-  if (destructionStr === null) return;
-  const terror = parseInt(terrorStr, 10);
-  const hate = parseInt(hateStr, 10);
-  const destruction = parseInt(destructionStr, 10);
-  if ([terror, hate, destruction].some(n => !Number.isInteger(n) || n < 0)) {
-    alert("All three values must be whole numbers ≥ 0 — nothing changed.");
-    return;
-  }
-  const { data, error } = await sb.from("key_counts")
-    .update({ terror, hate, destruction, updated_at: new Date().toISOString() })
-    .eq("id", 1)
-    .select();
-  if (error) {
-    alert(`Update failed: ${error.message}`);
-    return;
-  }
-  if (!data || data.length === 0) {
-    alert(
-      "Update request succeeded but changed 0 rows — this usually means the " +
-      "key_counts update policy hasn't been added yet " +
-      "(see supabase/migrations/0004_key_counts.sql) — nothing was changed."
-    );
-    return;
-  }
-  renderKeyCounts(data[0]);
-}
-
-document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
 
 async function loadTrialCount() {
   const { count } = await sb.from(BOT_CONFIGS[currentBot].trialsTable).select("*", { count: "exact", head: true });
@@ -1594,6 +1560,7 @@ sb.channel("bot_runs_live")
     updateLiveStatusTs();
     refreshLive();
     refreshHistory();
+    refreshKeyCounts();   // total_keys_collected() is derived from this table
   })
   .on("postgres_changes", { event: "INSERT", schema: "public", table: "warlock_runs" }, () => {
     if (currentBot !== "warlock") return;
@@ -1612,7 +1579,6 @@ sb.channel("bot_runs_live")
     populateTrialPicker();
     refreshRuneInventory();   // gold_collected/rune_pickups live on this row too
   })
-  .on("postgres_changes", { event: "*", schema: "public", table: "key_counts" }, refreshKeyCounts)
   .on("postgres_changes", { event: "*", schema: "public", table: "warlock_rune_inventory" }, refreshRuneInventory)
   .subscribe();
 
@@ -1649,10 +1615,10 @@ refreshRuneInventory();
 // fallback that doesn't depend on the websocket connection at all — it
 // just re-fetches and re-renders the Live tab every 15s, same as a manual
 // refresh would, so a missed push is corrected automatically within 15s.
-// key_counts is included here too: it was created via raw SQL (migration
-// 0004) rather than the table editor, so it may not be part of the
-// supabase_realtime publication — this poll keeps it self-healing even if
-// the websocket event for it never fires.
+// refreshKeyCounts is included here too: it's a plain RPC call (see
+// total_keys_collected(), migration 0013), not a realtime-subscribed
+// table, so this poll is what keeps the "Keys Collected" panel current as
+// new runs come in.
 setInterval(() => {
   refreshLive();
   refreshKeyCounts();
