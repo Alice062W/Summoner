@@ -20,29 +20,32 @@
   .back-link { font-size: 13px; }
   .empty-state { text-align: center; padding: 2.5rem 1rem; color: #a8916a; }
 
-  table.gem-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  table.gem-table th, table.gem-table td { text-align: center; padding: 8px 6px; border: 1px solid #3a2e1e; }
-  table.gem-table thead th { color: #a8916a; font-weight: 500; font-family: 'Cinzel', serif; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; padding-bottom: 6px; }
-  table.gem-table tbody th { text-align: left; color: #a8916a; font-family: 'Cinzel', serif; font-weight: 500; white-space: nowrap; padding-right: 10px; }
-  table.gem-table td.gem-cell { background: #221a12; color: #d8c9a8; font-size: 16px; font-weight: 600; position: relative; }
-  table.gem-table td.gem-cell.zero { color: #4a3f30; font-weight: 400; }
-  table.gem-table tr.perfect-row td.gem-cell { background: linear-gradient(160deg, #3a2410, #221a12); color: #f0d878; }
-  table.gem-table tr.perfect-row td.gem-cell.zero { color: #6a5a3a; }
-  table.gem-table tr.perfect-row th { color: #f0d878; }
-  td.gem-cell.ambiguous { box-shadow: inset 0 0 0 2px #c9a227; }
-  td.gem-cell .alt-note { display: block; font-size: 10px; font-weight: 400; color: #c9a227; margin-top: 2px; }
+  /* Rune-table look (see index.html's .rune-grid/.rune-box): rounded,
+     gapped boxes with a big icon rather than a bordered <table> grid. */
+  .gem-header-row { display: grid; grid-template-columns: repeat(7, minmax(60px, 1fr)); gap: 8px; margin-top: 10px; }
+  .gem-header-row div { text-align: center; color: #a8916a; font-weight: 500; font-family: 'Cinzel', serif; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
 
-  .gem-icon { display: inline-block; width: 22px; height: 22px; object-fit: contain; margin-bottom: 4px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
-  td.gem-cell .gem-icon { width: 18px; height: 18px; margin-bottom: 2px; }
+  .gem-grid { display: grid; grid-template-columns: repeat(7, minmax(60px, 1fr)); gap: 8px; margin-top: 6px; }
+  .gem-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 8px 4px; text-align: center; position: relative; }
+  .gem-box img { width: 56px; height: 56px; object-fit: contain; display: block; margin: 0 auto 4px; opacity: 0.55; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+  .gem-box.has-count img { opacity: 1; }
+  .gem-box p.gem-count { font-size: 16px; font-weight: 700; margin: 2px 0 0; color: #4a3f30; }
+  .gem-box.has-count p.gem-count { color: #d8c9a8; }
+  .gem-box.perfect-tier { background: linear-gradient(160deg, #3a2410, #221a12); border-color: #6a5232; }
+  .gem-box.perfect-tier.has-count p.gem-count { color: #f0d878; }
+  .gem-box.ambiguous { border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.4), inset 0 0 10px rgba(201,162,39,0.15); }
+  .gem-box .alt-note { display: block; font-size: 10px; font-weight: 400; color: #c9a227; margin-top: 2px; }
 
   .legend-note { font-size: 12px; color: #a8916a; margin-top: 10px; }
   .legend-note .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 2px #c9a227; margin: 0 4px -1px 10px; }
 
   @media (max-width: 640px) {
     body { font-size: 15px; padding: 0 0.75rem; margin: 1rem auto; }
-    table.gem-table { font-size: 12px; }
-    table.gem-table th, table.gem-table td { padding: 5px 3px; }
-    .gem-icon { width: 16px; height: 16px; }
+    .gem-header-row, .gem-grid { grid-template-columns: repeat(7, minmax(38px, 1fr)); gap: 4px; }
+    .gem-header-row div { font-size: 9px; }
+    .gem-box { padding: 5px 2px; }
+    .gem-box img { width: 34px; height: 34px; }
+    .gem-box p.gem-count { font-size: 13px; }
   }
 </style>
 </head>
@@ -78,25 +81,25 @@ function gemIconPath(r, c) {
 }
 
 function renderTable(grid, alts) {
-  let html = "<table class=\"gem-table\"><thead><tr>";
-  for (let c = 0; c < GEM_NAMES.length; c++) {
-    html += `<th><img class="gem-icon" src="${gemIconPath(2, c)}" alt="${GEM_NAMES[c]}"><br>${GEM_NAMES[c]}</th>`;
-  }
-  html += "</tr></thead><tbody>";
+  let html = `<div class="gem-header-row">${GEM_NAMES.map(name => `<div>${name}</div>`).join("")}</div>`;
+  html += `<div class="gem-grid">`;
   for (let r = 0; r < TIER_NAMES.length; r++) {
-    const rowClass = TIER_NAMES[r] === "Perfect" ? " class=\"perfect-row\"" : "";
-    html += `<tr${rowClass}>`;
     for (let c = 0; c < GEM_NAMES.length; c++) {
       const value = grid[r][c];
       const alt = alts && alts[r] ? alts[r][c] : null;
-      const zeroClass = value === 0 ? " zero" : "";
-      const ambiguousClass = alt !== null && alt !== undefined ? " ambiguous" : "";
-      const altNote = ambiguousClass ? `<span class="alt-note">or ${alt}?</span>` : "";
-      html += `<td class="gem-cell${zeroClass}${ambiguousClass}"><img class="gem-icon" src="${gemIconPath(r, c)}" alt="${GEM_NAMES[c]}"><br>${value}${altNote}</td>`;
+      const cls = ["gem-box"];
+      if (value > 0) cls.push("has-count");
+      if (TIER_NAMES[r] === "Perfect") cls.push("perfect-tier");
+      const ambiguous = alt !== null && alt !== undefined;
+      if (ambiguous) cls.push("ambiguous");
+      const altNote = ambiguous ? `<span class="alt-note">or ${alt}?</span>` : "";
+      html += `<div class="${cls.join(" ")}" title="${TIER_NAMES[r]} ${GEM_NAMES[c]}">
+        <img src="${gemIconPath(r, c)}" alt="${GEM_NAMES[c]}">
+        <p class="gem-count">${value}${altNote}</p>
+      </div>`;
     }
-    html += "</tr>";
   }
-  html += "</tbody></table>";
+  html += `</div>`;
   html += `<p class="legend-note">Rows = tier (Chipped &rarr; Perfect). A gold outline<span class="swatch"></span>marks a low-confidence digit read -- the "or X?" note is the runner-up guess; check the tool's saved screenshot if it matters.</p>`;
   return html;
 }
