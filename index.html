@@ -287,9 +287,16 @@ const DELETE_PASSPHRASE = "571028";
 // table names and per-bot UI differences (Warlock has no boss-arm-search
 // concept, so hasArmChart is false and its run rows/detail are rendered by
 // separate renderWarlock* functions instead of reusing the arm-detail ones).
+// runStatsRpc/trialCountRpc: server-side aggregation functions (supabase/
+// migrations/0014_history_stats_rpc.sql) used for the History tab's
+// headline numbers (Total Runs, Avg Time, Total Trials, etc.) instead of
+// counting rows in the browser -- see that migration's header comment for
+// why (Supabase silently caps .select().limit(N) responses at 1000 rows
+// regardless of the requested limit, so any date range with >1000 true
+// matching rows was showing a wrong, constant number).
 const BOT_CONFIGS = {
-  summoner: { trialsTable: "summoner_trials", runsTable: "summoner_runs", hasArmChart: true, title: "Summoner bot dashboard" },
-  warlock:  { trialsTable: "warlock_trials",  runsTable: "warlock_runs",  hasArmChart: false, title: "Warlock bot dashboard" },
+  summoner: { trialsTable: "summoner_trials", runsTable: "summoner_runs", hasArmChart: true, title: "Summoner bot dashboard", runStatsRpc: "summoner_run_stats", trialCountRpc: "summoner_trial_count" },
+  warlock:  { trialsTable: "warlock_trials",  runsTable: "warlock_runs",  hasArmChart: false, title: "Warlock bot dashboard", runStatsRpc: "warlock_run_stats", trialCountRpc: "warlock_trial_count" },
 };
 let currentBot = localStorage.getItem("selectedBot") || "summoner";
 if (!BOT_CONFIGS[currentBot]) currentBot = "summoner";
@@ -423,18 +430,59 @@ function rangeStartIso(hours) {
   return new Date(Date.now() - hours * 3600 * 1000).toISOString();
 }
 
+// Browser's IANA timezone name (e.g. "America/New_York") -- passed to the
+// warlock_run_stats/summoner_run_stats/warlock_trial_sums RPCs so their
+// SQL-side hour-of-day bucketing (see supabase/migrations/0014_history_
+// stats_rpc.sql) means the same "6am-12pm" the browser's own
+// new Date(...).getHours()-based hourBucket() means for the raw-row
+// fetches below.
+function localTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+// Supabase/PostgREST silently caps every .select() response at its server-
+// side db-max-rows setting (1000 on this project) no matter what .limit()
+// the client asks for -- confirmed against warlock_runs (2702 rows): a
+// request for limit=5000 still came back with exactly 1000 rows. Headline
+// stats (counts/sums/averages) are computed server-side instead (see the
+// RPCs above), but the charts genuinely need every matching row's detail,
+// so this pages through with repeated .range() calls until a page comes
+// back short of pageSize, which is the only way to get a complete result
+// past that server-side ceiling.
+async function fetchAllPages(table, buildQuery, pageSize = 1000) {
+  let all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await buildQuery(sb.from(table).select("*")).range(from, from + pageSize - 1);
+    if (error) return all;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 async function loadRuns() {
   const hours = parseInt(document.getElementById("rangeFilter").value, 10);
   const hourSel = document.getElementById("hourFilter").value;
-  const { data, error } = await sb
-    .from(BOT_CONFIGS[currentBot].runsTable)
-    .select("*")
-    .gte("started_at", rangeStartIso(hours))
-    .order("started_at", { ascending: false })
-    .limit(2000);
-  if (error) return [];
+  const data = await fetchAllPages(BOT_CONFIGS[currentBot].runsTable, q =>
+    q.gte("started_at", rangeStartIso(hours)).order("started_at", { ascending: false })
+  );
   if (hourSel === "all") return data;
   return data.filter(r => hourBucket(new Date(r.started_at).getHours()) === hourSel);
+}
+
+// Precise headline counts (Total Runs, Avg Time, stash-fail/key-run counts)
+// via server-side aggregation -- see loadRuns()'s comment for why this
+// can't be derived from a row fetch. Returns the RPC's single result row.
+async function loadRunStats() {
+  const hours = parseInt(document.getElementById("rangeFilter").value, 10);
+  const hourSel = document.getElementById("hourFilter").value;
+  const { data, error } = await sb.rpc(BOT_CONFIGS[currentBot].runStatsRpc, {
+    p_start: rangeStartIso(hours), p_tz: localTimezone(), p_hour_bucket: hourSel,
+  });
+  if (error || !data || data.length === 0) return { run_count: 0, avg_duration_seconds: 0, stash_fail_count: 0, key_run_count: 0 };
+  return data[0];
 }
 
 // Live tab — manually-tracked physical stash key inventory (across all
@@ -550,14 +598,13 @@ function renderRuneInventory(row, trialProgress) {
 // sum over a period, not the stash's current contents.
 //
 // Also folds in, for the same selected period:
-//  - Total gold collected: summed from warlock_trials.gold_collected (the
-//    same per-trial "collected so far this trial" cumulative field the Live
-//    tab's gold box reads — see supabase/migrations/0008_warlock_trial_progress.sql),
-//    filtered the same way _lastMercRevivals already is in refreshHistory()
-//    (range via started_at, plus hour-of-day bucket for the "time slot"
-//    filter). Note: like _lastMercRevivals, this reads from loadTrialList()'s
-//    100-row cap — if a period has more than 100 trials, older ones outside
-//    that cap won't be counted.
+//  - Total gold collected: summed server-side from warlock_trials.gold_collected
+//    (see supabase/migrations/0014_history_stats_rpc.sql's warlock_trial_sums)
+//    — refreshHistory() already computes this into _lastGoldCollected
+//    alongside _lastMercRevivals, so this function just reads it rather than
+//    re-fetching (previously via loadTrialList(), which silently under-
+//    counted for any period with more than 100 true matching trials — see
+//    that migration's header comment for the full story).
 //  - Loot-type totals: reuses renderLootTally as-is against _lastHistoryRuns,
 //    which refreshHistory() already populates via the same range/hour-filtered
 //    loadRuns() the run list and other History charts use.
@@ -568,17 +615,9 @@ async function renderHistoryRuneStats() {
   events.forEach(ev => { totals[ev.rune] = (totals[ev.rune] || 0) + ev.delta; });
   renderRuneGrid("historyRuneGrid", totals, { highlightSelf: true });
 
-  const hours = parseInt(document.getElementById("rangeFilter").value, 10);
-  const hourSel = document.getElementById("hourFilter").value;
-  const startIso = rangeStartIso(hours);
-  const trials = await loadTrialList();
-  const goldTotal = trials
-    .filter(t => t.started_at >= startIso &&
-      (hourSel === "all" || hourBucket(new Date(t.started_at).getHours()) === hourSel))
-    .reduce((sum, t) => sum + (t.gold_collected || 0), 0);
   document.getElementById("historyRuneGrid").innerHTML += `<div class="rune-gold-box" style="grid-row:4; grid-column:3 / span 5;">
     <p class="rune-gold-label">💰 Gold collected (selected period)</p>
-    <p class="rune-gold-amount">${goldTotal.toLocaleString()}</p>
+    <p class="rune-gold-amount">${_lastGoldCollected.toLocaleString()}</p>
   </div>`;
 
   renderLootTally(_lastHistoryRuns, "historyLootTally");
@@ -633,8 +672,12 @@ async function editKeyCounts() {
 document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
 
 async function loadTrialCount() {
-  const { count } = await sb.from(BOT_CONFIGS[currentBot].trialsTable).select("*", { count: "exact", head: true });
-  return count || 0;
+  // Previously an unconditional count-everything with no date filter at
+  // all (a second bug alongside the row-cap one -- Total Trials never
+  // respected the selected duration). Now filtered via the RPC's p_start.
+  const hours = parseInt(document.getElementById("rangeFilter").value, 10);
+  const { data, error } = await sb.rpc(BOT_CONFIGS[currentBot].trialCountRpc, { p_start: rangeStartIso(hours) });
+  return error || data === null ? 0 : data;
 }
 
 // Existing per-run callers never exceed a few minutes, so the "h" part was
@@ -648,6 +691,11 @@ function fmtSeconds(s) {
   return m > 0 ? `${m}m ${r}s` : `${r}s`;
 }
 
+// Still used by renderTrialSummary() for a single trial's runs (fetched via
+// loadRunsForTrial, always well under the row cap since a trial maxes out
+// at a couple hundred runs) -- the History tab's headline stats no longer
+// use these (see renderStats/loadRunStats above), since a trial-agnostic
+// range can trivially exceed the row cap where a single trial never does.
 function avgDurationLabel(runs) {
   if (runs.length === 0) return "-";
   const totalDur = runs.reduce((sum, r) => sum + (new Date(r.ended_at) - new Date(r.started_at)) / 1000, 0);
@@ -659,15 +707,19 @@ function avgRunsPerKeyLabel(runs) {
   return keyRuns.length > 0 ? (runs.length / keyRuns.length).toFixed(1) : "-";
 }
 
-function renderStats(runs, trialCount) {
-  document.getElementById("statRuns").textContent = runs.length;
+function renderStats(runStats, trialCount) {
+  const runCount = Number(runStats.run_count) || 0;
+  document.getElementById("statRuns").textContent = runCount;
   document.getElementById("statTrials").textContent = trialCount;
-  document.getElementById("statAvgTime").textContent = avgDurationLabel(runs);
+  document.getElementById("statAvgTime").textContent =
+    runCount === 0 ? "-" : fmtSeconds(Number(runStats.avg_duration_seconds) || 0);
   if (currentBot === "warlock") {
-    const stashFails = runs.filter(r => r.result === "stash_restart").length;
-    document.getElementById("statRunsPerKey").textContent = `🧟 ${_lastMercRevivals} · 🧺❌ ${stashFails}`;
+    document.getElementById("statRunsPerKey").textContent =
+      `🧟 ${_lastMercRevivals} · 🧺❌ ${Number(runStats.stash_fail_count) || 0}`;
   } else {
-    document.getElementById("statRunsPerKey").textContent = avgRunsPerKeyLabel(runs);
+    const keyRunCount = Number(runStats.key_run_count) || 0;
+    document.getElementById("statRunsPerKey").textContent =
+      keyRunCount > 0 ? (runCount / keyRunCount).toFixed(1) : "-";
   }
 }
 
@@ -750,13 +802,13 @@ const LOOT_POINT_STYLES = {
 async function loadRuneEvents() {
   const hours = parseInt(document.getElementById("rangeFilter").value, 10);
   const hourSel = document.getElementById("hourFilter").value;
-  const { data, error } = await sb
-    .from("warlock_rune_events")
-    .select("*")
-    .gte("occurred_at", rangeStartIso(hours))
-    .order("occurred_at", { ascending: true })
-    .limit(5000);
-  if (error) return [];
+  // Paginated (see loadRuns()'s comment) rather than a plain .limit(5000) --
+  // under ~475 total events today so not actively truncating yet, but the
+  // same server-side row cap that broke Total Runs applies here too once
+  // rune-pickup volume grows past 1000 for a given range.
+  const data = await fetchAllPages("warlock_rune_events", q =>
+    q.gte("occurred_at", rangeStartIso(hours)).order("occurred_at", { ascending: true })
+  );
   if (hourSel === "all") return data;
   return data.filter(ev => hourBucket(new Date(ev.occurred_at).getHours()) === hourSel);
 }
@@ -1513,21 +1565,28 @@ function renderKeyHateBadge(runs) {
 }
 
 let _lastHistoryRuns = [];
+let _lastGoldCollected = 0;
 async function refreshHistory() {
-  const [runs, trialCount] = await Promise.all([loadRuns(), loadTrialCount()]);
+  const [runs, runStats, trialCount] = await Promise.all([loadRuns(), loadRunStats(), loadTrialCount()]);
   _lastHistoryRuns = runs;
   if (currentBot === "summoner") refreshHistoryKeyCounts();
   if (currentBot === "warlock") {
-    // merc_revivals lives on warlock_trials, not per-run — sum it across
-    // trials whose started_at falls in the same range the run list used.
-    const trials = await loadTrialList();
+    // gold_collected/merc_revivals live on warlock_trials, not per-run —
+    // summed server-side (see supabase/migrations/0014_history_stats_rpc.sql)
+    // rather than fetched via loadTrialList(), which only ever returns the
+    // 100 most-recent trials total (fine for the trial-picker dropdown it
+    // was designed for, but was silently under-counting these two sums for
+    // any selected range with more than 100 true matching trials).
     const hours = parseInt(document.getElementById("rangeFilter").value, 10);
-    const startIso = rangeStartIso(hours);
-    _lastMercRevivals = trials
-      .filter(t => t.started_at >= startIso)
-      .reduce((sum, t) => sum + (t.merc_revivals || 0), 0);
+    const hourSel = document.getElementById("hourFilter").value;
+    const { data, error } = await sb.rpc("warlock_trial_sums", {
+      p_start: rangeStartIso(hours), p_tz: localTimezone(), p_hour_bucket: hourSel,
+    });
+    const sums = (!error && data && data.length > 0) ? data[0] : { gold_collected_sum: 0, merc_revivals_sum: 0 };
+    _lastGoldCollected = Number(sums.gold_collected_sum) || 0;
+    _lastMercRevivals = Number(sums.merc_revivals_sum) || 0;
   }
-  renderStats(runs, trialCount);
+  renderStats(runStats, trialCount);
   if (BOT_CONFIGS[currentBot].hasArmChart) renderArmChart(runs);
   renderLootLineChart(runs);
   renderDurationChart(runs);
