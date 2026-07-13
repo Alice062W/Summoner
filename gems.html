@@ -124,8 +124,24 @@ function computeStats(grid) {
   return { totalPerfect, totalPerfectNonAmethyst };
 }
 
-function renderStats(grid) {
+// Same shape as index.html's fmtSeconds -- duplicated rather than shared,
+// matching this page's existing "zero dependency on the other dashboard
+// page" design (see the <style> block's comment up top).
+function fmtSeconds(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = Math.round(s % 60);
+  if (h > 0) return `${h}h ${m}m ${r}s`;
+  return m > 0 ? `${m}m ${r}s` : `${r}s`;
+}
+
+function renderStats(grid, durationSeconds) {
   const { totalPerfect, totalPerfectNonAmethyst } = computeStats(grid);
+  // 0 means this snapshot came from a plain F11 scan, not an actual merge
+  // pass (see gem_merge.py's scan_only()/push_gem_scan() -- duration
+  // defaults to 0 there) -- shown as a plain "0s" per that same convention,
+  // not blanked out, so it's clear a scan (not a merge) produced this row.
+  const durationLabel = fmtSeconds(durationSeconds || 0);
   return `<div class="gem-stats-row">
     <div class="gem-stat-box">
       <div class="gem-stat-label">Total Perfect Gems</div>
@@ -134,6 +150,10 @@ function renderStats(grid) {
     <div class="gem-stat-box">
       <div class="gem-stat-label">Total Perfect (non-Amethyst)</div>
       <div class="gem-stat-value">${totalPerfectNonAmethyst}</div>
+    </div>
+    <div class="gem-stat-box">
+      <div class="gem-stat-label">Last Merge Duration</div>
+      <div class="gem-stat-value">${durationLabel}</div>
     </div>
   </div>`;
 }
@@ -148,7 +168,7 @@ function render(row) {
   }
   const scannedAt = new Date(row.scanned_at);
   scannedAtEl.textContent = "Last scanned: " + scannedAt.toLocaleString();
-  contentEl.innerHTML = renderStats(row.grid) + renderTable(row.grid, row.alts);
+  contentEl.innerHTML = renderStats(row.grid, row.duration_seconds) + renderTable(row.grid, row.alts);
 }
 
 async function loadScan() {
