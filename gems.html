@@ -36,6 +36,11 @@
   .gem-box.ambiguous { border-color: #c9a227; box-shadow: 0 0 10px rgba(201,162,39,0.4), inset 0 0 10px rgba(201,162,39,0.15); }
   .gem-box .alt-note { display: block; font-size: 10px; font-weight: 400; color: #c9a227; margin-top: 2px; }
 
+  .gem-stats-row { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .gem-stat-box { flex: 1; min-width: 160px; background: linear-gradient(160deg, #3a2410, #221a12); border: 1px solid #6a5232; border-radius: 10px; padding: 10px 14px; }
+  .gem-stat-box .gem-stat-label { font-size: 12px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .gem-stat-box .gem-stat-value { font-size: 26px; font-weight: 700; color: #f0d878; font-family: 'Cinzel', serif; }
+
   .legend-note { font-size: 12px; color: #a8916a; margin-top: 10px; }
   .legend-note .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 2px #c9a227; margin: 0 4px -1px 10px; }
 
@@ -104,6 +109,35 @@ function renderTable(grid, alts) {
   return html;
 }
 
+// Perfect is always the last row (TIER_NAMES[4]); Amethyst's column index is
+// looked up by name rather than hardcoded 4, so this keeps working even if
+// GEM_NAMES's order ever changes.
+const PERFECT_ROW = TIER_NAMES.indexOf("Perfect");
+const AMETHYST_COL = GEM_NAMES.indexOf("Amethyst");
+
+function computeStats(grid) {
+  const perfectRow = grid[PERFECT_ROW] || [];
+  const totalPerfect = perfectRow.reduce((sum, v) => sum + (v || 0), 0);
+  const totalPerfectNonAmethyst = perfectRow.reduce(
+    (sum, v, c) => sum + (c === AMETHYST_COL ? 0 : (v || 0)), 0
+  );
+  return { totalPerfect, totalPerfectNonAmethyst };
+}
+
+function renderStats(grid) {
+  const { totalPerfect, totalPerfectNonAmethyst } = computeStats(grid);
+  return `<div class="gem-stats-row">
+    <div class="gem-stat-box">
+      <div class="gem-stat-label">Total Perfect Gems</div>
+      <div class="gem-stat-value">${totalPerfect}</div>
+    </div>
+    <div class="gem-stat-box">
+      <div class="gem-stat-label">Total Perfect (non-Amethyst)</div>
+      <div class="gem-stat-value">${totalPerfectNonAmethyst}</div>
+    </div>
+  </div>`;
+}
+
 function render(row) {
   const contentEl = document.getElementById("content");
   const scannedAtEl = document.getElementById("scannedAt");
@@ -114,7 +148,7 @@ function render(row) {
   }
   const scannedAt = new Date(row.scanned_at);
   scannedAtEl.textContent = "Last scanned: " + scannedAt.toLocaleString();
-  contentEl.innerHTML = renderTable(row.grid, row.alts);
+  contentEl.innerHTML = renderStats(row.grid) + renderTable(row.grid, row.alts);
 }
 
 async function loadScan() {
