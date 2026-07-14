@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gem Merge — Stash Snapshot</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -44,6 +45,16 @@
   .legend-note { font-size: 12px; color: #a8916a; margin-top: 10px; }
   .legend-note .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 2px #c9a227; margin: 0 4px -1px 10px; }
 
+  /* History section: range filter, trend chart, past-record picker --
+     same select styling as index.html's rangeFilter/hourFilter (not
+     literally shared, this page has no shared CSS/JS with index.html by
+     design, see the top comment). */
+  select { background: #2a2018; color: #d8c9a8; border: 1px solid #4a3a24; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .history-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .history-controls label { font-size: 12px; color: #a8916a; }
+  canvas#gemHistoryChart { max-height: 320px; }
+  .history-empty { text-align: center; padding: 1.5rem 1rem; color: #a8916a; font-size: 13px; }
+
   @media (max-width: 640px) {
     body { font-size: 15px; padding: 0 0.75rem; margin: 1rem auto; }
     .gem-header-row, .gem-grid { grid-template-columns: repeat(7, minmax(38px, 1fr)); gap: 4px; }
@@ -64,6 +75,36 @@
 <div class="panel">
   <div id="scannedAt" class="scanned-at">Loading…</div>
   <div id="content"></div>
+</div>
+
+<div class="panel">
+  <h3 style="margin:0 0 10px;">Perfect Gems Over Time</h3>
+  <div class="history-controls">
+    <label for="historyRangeFilter">Range:</label>
+    <select id="historyRangeFilter">
+      <option value="12">Last 12 hours</option>
+      <option value="24">Last 1 day</option>
+      <option value="72">Last 3 days</option>
+      <option value="168" selected>Last 7 days</option>
+      <option value="336">Last 2 weeks</option>
+      <option value="720">Last month</option>
+      <option value="0">All time</option>
+    </select>
+  </div>
+  <canvas id="gemHistoryChart"></canvas>
+  <div id="gemHistoryEmpty" class="history-empty" style="display:none;">No history in this range yet.</div>
+</div>
+
+<div class="panel">
+  <h3 style="margin:0 0 10px;">View a Past Record</h3>
+  <div class="history-controls">
+    <label for="historyRecordPicker">Record:</label>
+    <select id="historyRecordPicker">
+      <option value="">Choose a timestamp…</option>
+    </select>
+  </div>
+  <div id="historyRecordScannedAt" class="scanned-at"></div>
+  <div id="historyRecordContent"></div>
 </div>
 
 <script>
@@ -118,10 +159,9 @@ const AMETHYST_COL = GEM_NAMES.indexOf("Amethyst");
 function computeStats(grid) {
   const perfectRow = grid[PERFECT_ROW] || [];
   const totalPerfect = perfectRow.reduce((sum, v) => sum + (v || 0), 0);
-  const totalPerfectNonAmethyst = perfectRow.reduce(
-    (sum, v, c) => sum + (c === AMETHYST_COL ? 0 : (v || 0)), 0
-  );
-  return { totalPerfect, totalPerfectNonAmethyst };
+  const totalPerfectAmethyst = perfectRow[AMETHYST_COL] || 0;
+  const totalPerfectNonAmethyst = totalPerfect - totalPerfectAmethyst;
+  return { totalPerfect, totalPerfectNonAmethyst, totalPerfectAmethyst };
 }
 
 // Same shape as index.html's fmtSeconds -- duplicated rather than shared,
@@ -181,11 +221,139 @@ async function loadScan() {
   render(data);
 }
 
+// ── History: trend chart + past-record picker ──────────────────────────────
+
+function rangeStartIso(hours) {
+  if (hours === 0) return "1970-01-01T00:00:00Z";
+  return new Date(Date.now() - hours * 3600 * 1000).toISOString();
+}
+
+// Supabase/PostgREST caps every .select() response at its server-side
+// db-max-rows setting (1000 on this project) regardless of the requested
+// .limit() -- see dashboard/index.html's fetchAllPages for the full story
+// (confirmed there against warlock_runs). Paginating from the start here
+// rather than reusing a plain .limit() avoids reintroducing that same bug
+// once gem_merge_scan_history grows past 1000 rows for a given range.
+async function fetchAllPages(table, buildQuery, pageSize = 1000) {
+  let all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await buildQuery(sb.from(table).select("*")).range(from, from + pageSize - 1);
+    if (error) return all;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+async function loadScanHistory(hours) {
+  return fetchAllPages("gem_merge_scan_history", q =>
+    q.gte("scanned_at", rangeStartIso(hours)).order("scanned_at", { ascending: true })
+  );
+}
+
+let gemHistoryChart = null;
+function renderGemHistoryChart(rows) {
+  const ctx = document.getElementById("gemHistoryChart");
+  const emptyEl = document.getElementById("gemHistoryEmpty");
+  if (gemHistoryChart) { gemHistoryChart.destroy(); gemHistoryChart = null; }
+
+  if (rows.length === 0) {
+    ctx.style.display = "none";
+    emptyEl.style.display = "";
+    return;
+  }
+  ctx.style.display = "";
+  emptyEl.style.display = "none";
+
+  const labels = rows.map(r => new Date(r.scanned_at).toLocaleString());
+  const totalPerfect = [];
+  const totalPerfectNonAmethyst = [];
+  const totalPerfectAmethyst = [];
+  rows.forEach(r => {
+    const s = computeStats(r.grid);
+    totalPerfect.push(s.totalPerfect);
+    totalPerfectNonAmethyst.push(s.totalPerfectNonAmethyst);
+    totalPerfectAmethyst.push(s.totalPerfectAmethyst);
+  });
+
+  gemHistoryChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: "Total Perfect", data: totalPerfect, borderColor: "#f0d878", backgroundColor: "#f0d878", tension: 0.25 },
+        { label: "Total Perfect (non-Amethyst)", data: totalPerfectNonAmethyst, borderColor: "#1D9E75", backgroundColor: "#1D9E75", tension: 0.25 },
+        { label: "Total Perfect Amethyst", data: totalPerfectAmethyst, borderColor: "#9C5FD8", backgroundColor: "#9C5FD8", tension: 0.25 },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+function populateHistoryPicker(rows) {
+  const sel = document.getElementById("historyRecordPicker");
+  const prevValue = sel.value;
+  sel.innerHTML = '<option value="">Choose a timestamp…</option>';
+  // Newest first in the dropdown -- rows arrives oldest-first (chart needs
+  // that order), so just walk it backwards here rather than re-querying.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    const opt = document.createElement("option");
+    opt.value = String(r.id);
+    const s = computeStats(r.grid);
+    opt.textContent = `${new Date(r.scanned_at).toLocaleString()} — ${s.totalPerfect} perfect`;
+    sel.appendChild(opt);
+  }
+  if (rows.some(r => String(r.id) === prevValue)) {
+    sel.value = prevValue;
+  } else {
+    document.getElementById("historyRecordScannedAt").textContent = "";
+    document.getElementById("historyRecordContent").innerHTML = "";
+  }
+}
+
+let _lastHistoryRows = [];
+function showHistoryRecord(id) {
+  const scannedAtEl = document.getElementById("historyRecordScannedAt");
+  const contentEl = document.getElementById("historyRecordContent");
+  if (!id) {
+    scannedAtEl.textContent = "";
+    contentEl.innerHTML = "";
+    return;
+  }
+  const row = _lastHistoryRows.find(r => String(r.id) === id);
+  if (!row) return;
+  scannedAtEl.textContent = "Scanned: " + new Date(row.scanned_at).toLocaleString();
+  contentEl.innerHTML = renderStats(row.grid, row.duration_seconds) + renderTable(row.grid, row.alts);
+}
+
+async function refreshGemHistory() {
+  const hours = parseInt(document.getElementById("historyRangeFilter").value, 10);
+  _lastHistoryRows = await loadScanHistory(hours);
+  renderGemHistoryChart(_lastHistoryRows);
+  populateHistoryPicker(_lastHistoryRows);
+}
+
+document.getElementById("historyRangeFilter").addEventListener("change", refreshGemHistory);
+document.getElementById("historyRecordPicker").addEventListener("change", (e) => showHistoryRecord(e.target.value));
+
 loadScan();
+refreshGemHistory();
 
 // Live-update whenever the Gem Merge tool pushes a new F11 scan, no manual refresh needed.
 sb.channel("gem-merge-scan-updates")
   .on("postgres_changes", { event: "*", schema: "public", table: "gem_merge_scan" }, () => loadScan())
+  .subscribe();
+
+// Same for the history chart/picker -- a fresh row lands in
+// gem_merge_scan_history on every scan too (see upsert_gem_merge_scan()).
+sb.channel("gem-merge-scan-history-updates")
+  .on("postgres_changes", { event: "*", schema: "public", table: "gem_merge_scan_history" }, () => refreshGemHistory())
   .subscribe();
 </script>
 
