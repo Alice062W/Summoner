@@ -1384,12 +1384,14 @@ function renderRatioStats(elId, runs, mercRevivals) {
   const stashSuccess = runs.filter(r => r.stash_result === "success").length;
   const stashFail = runs.filter(r => r.stash_result === "fail").length;
   const stashTotal = stashSuccess + stashFail;
+  const connFailed = runs.filter(r => r.connection_failed).length;
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `❌ ${bossMiss}/${total} (${pct(bossMiss, total)}%) · ` +
     `🌀 ${portalFail}/${total} (${pct(portalFail, total)}%) · ` +
     `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
-    `🧟 ${mercRevivals ?? 0}`;
+    `🧟 ${mercRevivals ?? 0}` +
+    (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
 }
 
 // Warlock equivalent of renderRatioStats. `result` is a mutually exclusive,
@@ -1410,11 +1412,13 @@ function renderWarlockRatioStats(elId, runs, mercRevivals) {
   const stashSuccess = runs.filter(r => r.stash_result === "success").length;
   const stashFail = runs.filter(r => r.stash_result === "fail").length;
   const stashTotal = stashSuccess + stashFail;
+  const connFailed = runs.filter(r => r.connection_failed).length;
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `🌀 ${wpFail}/${total} (${pct(wpFail, total)}%) · ` +
     `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
-    `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}/${total} (${pct(stashRestart, total)}%)`;
+    `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}/${total} (${pct(stashRestart, total)}%)` +
+    (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
 }
 
 // Renders every individual template-match attempt behind a stash/WP result
