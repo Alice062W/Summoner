@@ -1260,7 +1260,7 @@ function renderArmDetailHtml(run) {
       &nbsp;&nbsp;<strong>Portal fail:</strong> ${run.portal_fail ? "yes" : "no"}
       &nbsp;&nbsp;<strong>Merc died:</strong> ${run.merc_died ? "yes" : "no"}
       &nbsp;&nbsp;<strong>Merc revival attempts:</strong> ${run.merc_revival_attempts ?? 0}
-      &nbsp;&nbsp;<strong>Connection failed:</strong> ${run.connection_failed ? "yes" : "no"}
+      &nbsp;&nbsp;<strong>Connection failed (確定 clicked):</strong> ${run.connection_failed_count ?? 0}
     </div>
     <div style="margin-top:8px;">
       <strong>Loot:</strong>
@@ -1456,7 +1456,7 @@ function renderWarlockDetailHtml(run) {
     <div><strong>Started:</strong> ${startedLabel}</div>
     <div style="margin-top:4px;"><strong>Stash:</strong> ${stashLabel}</div>
     <div style="margin-top:4px;"><strong>Time used:</strong> ${durationLabel}</div>
-    <div style="margin-top:4px;"><strong>Connection failed:</strong> ${run.connection_failed ? "yes" : "no"}</div>
+    <div style="margin-top:4px;"><strong>Connection failed (確定 clicked):</strong> ${run.connection_failed_count ?? 0}</div>
     ${renderScanListHtml(run.stash_scans, "Stash")}
     ${renderScanListHtml(run.wp_scans, "WP")}
     <div style="margin-top:8px;">
