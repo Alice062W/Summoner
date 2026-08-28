@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warlock_bet — Coronet Gambling</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Same dark-fantasy palette as index.html/gems.html, kept standalone (no
+     shared CSS file) -- see gems.html's own note on this, same reasoning
+     applies here: this page has zero dependency on the Summoner/Warlock
+     dashboard's bot-switcher machinery. */
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #15110d; color: #d8c9a8; }
+  h2, h3, strong { font-family: 'Cinzel', serif; }
+  a { color: #f0d878; }
+  .panel { border: 1px solid #4a3a24; background: #1c1610; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+  .top-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 1rem; }
+  .back-link { font-size: 13px; }
+  .empty-state, .history-empty { text-align: center; padding: 1.5rem 1rem; color: #a8916a; font-size: 13px; }
+
+  select { background: #2a2018; color: #d8c9a8; border: 1px solid #4a3a24; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .history-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .history-controls label { font-size: 12px; color: #a8916a; }
+
+  .stat-row { display: flex; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+  .stat-box { flex: 1; min-width: 150px; background: linear-gradient(160deg, #3a2410, #221a12); border: 1px solid #6a5232; border-radius: 10px; padding: 10px 14px; }
+  .stat-box .stat-label { font-size: 12px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .stat-box .stat-value { font-size: 26px; font-weight: 700; color: #f0d878; font-family: 'Cinzel', serif; }
+
+  .breakdown-row { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .breakdown-box { flex: 1; min-width: 140px; background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 8px 12px; text-align: center; }
+  .breakdown-box .breakdown-label { font-size: 11px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .breakdown-box .breakdown-value { font-size: 20px; font-weight: 700; color: #d8c9a8; }
+  .breakdown-box.fcr { border-color: #378ADD; } .breakdown-box.fcr .breakdown-value { color: #6fb3f0; }
+  .breakdown-box.sockets { border-color: #1D9E75; } .breakdown-box.sockets .breakdown-value { color: #3ecf9a; }
+  .breakdown-box.amazon { border-color: #9C5FD8; } .breakdown-box.amazon .breakdown-value { color: #c39cf0; }
+
+  canvas#coronetHistoryChart { max-height: 320px; }
+
+  .trial-meta { font-size: 13px; color: #a8916a; margin: 6px 0 0; }
+  .trial-meta .strict-badge { color: #c9a227; }
+
+  @media (max-width: 640px) {
+    body { font-size: 15px; padding: 0 0.75rem; margin: 1rem auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-row">
+  <h2 style="margin:0;">Warlock_bet — Coronet Gambling</h2>
+  <a class="back-link" href="index.html">&larr; Back to main dashboard</a>
+</div>
+
+<div class="panel">
+  <h3 style="margin:0 0 10px;">Stats — Selected Period</h3>
+  <div class="history-controls">
+    <label for="rangeFilter">Range:</label>
+    <select id="rangeFilter">
+      <option value="12">Last 12 hours</option>
+      <option value="24">Last 1 day</option>
+      <option value="72">Last 3 days</option>
+      <option value="168" selected>Last 7 days</option>
+      <option value="336">Last 2 weeks</option>
+      <option value="720">Last month</option>
+      <option value="0">All time</option>
+    </select>
+  </div>
+  <div id="periodStats"></div>
+</div>
+
+<div class="panel">
+  <h3 style="margin:0 0 10px;">Coronets Kept Over Time</h3>
+  <canvas id="coronetHistoryChart"></canvas>
+  <div id="coronetHistoryEmpty" class="history-empty" style="display:none;">No trials in this range yet.</div>
+</div>
+
+<div class="panel">
+  <h3 style="margin:0 0 10px;">View a Past Trial</h3>
+  <div class="history-controls">
+    <label for="trialPicker">Trial:</label>
+    <select id="trialPicker">
+      <option value="">Choose a trial…</option>
+    </select>
+  </div>
+  <div id="trialDetail"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Same pagination-safety note as gems.html's fetchAllPages (see there for
+// the full story) -- Supabase/PostgREST caps every .select() response at
+// 1000 rows server-side regardless of .limit(), so a naive query silently
+// truncates once coronet_trials grows past that for a given range.
+async function fetchAllPages(table, buildQuery, pageSize = 1000) {
+  let all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await buildQuery(sb.from(table).select("*")).range(from, from + pageSize - 1);
+    if (error) { console.error(error); return all; }
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+function rangeStartIso(hours) {
+  if (hours === 0) return "1970-01-01T00:00:00Z";
+  return new Date(Date.now() - hours * 3600 * 1000).toISOString();
+}
+
+async function loadTrials(hours) {
+  return fetchAllPages("coronet_trials", q =>
+    q.gte("started_at", rangeStartIso(hours)).order("started_at", { ascending: true })
+  );
+}
+
+function sumField(rows, field) {
+  return rows.reduce((s, r) => s + (r[field] || 0), 0);
+}
+
+function statsBlockHtml(rows) {
+  if (rows.length === 0) {
+    return `<div class="empty-state">No trials in this period.</div>`;
+  }
+  const goldSpent = sumField(rows, "gold_spent");
+  const bought = sumField(rows, "coronets_bought");
+  const kept = sumField(rows, "coronets_kept");
+  const fcr = sumField(rows, "kept_fcr_skill");
+  const sockets = sumField(rows, "kept_3sockets");
+  const amazon = sumField(rows, "kept_amazon_llm");
+  return `<div class="stat-row">
+      <div class="stat-box"><div class="stat-label">Total Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Total Coronets Bought</div><div class="stat-value">${bought.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Total Coronets Kept</div><div class="stat-value">${kept.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Trials</div><div class="stat-value">${rows.length}</div></div>
+    </div>
+    <div class="breakdown-row">
+      <div class="breakdown-box fcr"><div class="breakdown-label">FCR + Skill</div><div class="breakdown-value">${fcr}</div></div>
+      <div class="breakdown-box sockets"><div class="breakdown-label">3 Sockets</div><div class="breakdown-value">${sockets}</div></div>
+      <div class="breakdown-box amazon"><div class="breakdown-label">Amazon + LL/LM</div><div class="breakdown-value">${amazon}</div></div>
+    </div>`;
+}
+
+let coronetHistoryChart = null;
+function renderHistoryChart(rows) {
+  const ctx = document.getElementById("coronetHistoryChart");
+  const emptyEl = document.getElementById("coronetHistoryEmpty");
+  if (coronetHistoryChart) { coronetHistoryChart.destroy(); coronetHistoryChart = null; }
+
+  if (rows.length === 0) {
+    ctx.style.display = "none";
+    emptyEl.style.display = "";
+    return;
+  }
+  ctx.style.display = "";
+  emptyEl.style.display = "none";
+
+  const labels = rows.map(r => new Date(r.started_at).toLocaleString());
+  coronetHistoryChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: "Kept (total)", data: rows.map(r => r.coronets_kept || 0), borderColor: "#f0d878", backgroundColor: "#f0d878", tension: 0.25 },
+        { label: "FCR + Skill", data: rows.map(r => r.kept_fcr_skill || 0), borderColor: "#378ADD", backgroundColor: "#378ADD", tension: 0.25 },
+        { label: "3 Sockets", data: rows.map(r => r.kept_3sockets || 0), borderColor: "#1D9E75", backgroundColor: "#1D9E75", tension: 0.25 },
+        { label: "Amazon + LL/LM", data: rows.map(r => r.kept_amazon_llm || 0), borderColor: "#9C5FD8", backgroundColor: "#9C5FD8", tension: 0.25 },
+        { label: "Bought", data: rows.map(r => r.coronets_bought || 0), borderColor: "#a8916a", backgroundColor: "#a8916a", tension: 0.25, hidden: true },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+function populateTrialPicker(rows) {
+  const sel = document.getElementById("trialPicker");
+  const prevValue = sel.value;
+  sel.innerHTML = '<option value="">Choose a trial…</option>';
+  // Newest first -- rows arrives oldest-first (chart needs that order), so
+  // just walk it backwards here rather than re-querying, same as gems.html.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    const opt = document.createElement("option");
+    opt.value = r.trial_id;
+    opt.textContent = `${new Date(r.started_at).toLocaleString()} — ${r.coronets_kept || 0} kept / ${r.coronets_bought || 0} bought`;
+    sel.appendChild(opt);
+  }
+  if (rows.some(r => r.trial_id === prevValue)) {
+    sel.value = prevValue;
+  } else {
+    document.getElementById("trialDetail").innerHTML = "";
+  }
+}
+
+let _lastTrials = [];
+function trialDetailHtml(r) {
+  const started = new Date(r.started_at).toLocaleString();
+  const ended = r.ended_at ? new Date(r.ended_at).toLocaleString() : "(still running)";
+  const strictBadge = r.strict_rule
+    ? `<span class="strict-badge">Strict rule</span>` : `<span>General rule</span>`;
+  return `<p class="trial-meta"><strong>Started:</strong> ${started} &nbsp; <strong>Ended:</strong> ${ended} &nbsp; ${strictBadge}</p>
+    <p class="trial-meta"><strong>Stop reason:</strong> ${r.stop_reason || "-"}</p>
+    ${statsBlockHtml([r])}`;
+}
+
+function showTrialDetail(trialId) {
+  const el = document.getElementById("trialDetail");
+  if (!trialId) { el.innerHTML = ""; return; }
+  const row = _lastTrials.find(r => r.trial_id === trialId);
+  if (!row) return;
+  el.innerHTML = trialDetailHtml(row);
+}
+
+async function refresh() {
+  const hours = parseInt(document.getElementById("rangeFilter").value, 10);
+  _lastTrials = await loadTrials(hours);
+  document.getElementById("periodStats").innerHTML = statsBlockHtml(_lastTrials);
+  renderHistoryChart(_lastTrials);
+  populateTrialPicker(_lastTrials);
+}
+
+document.getElementById("rangeFilter").addEventListener("change", refresh);
+document.getElementById("trialPicker").addEventListener("change", (e) => showTrialDetail(e.target.value));
+
+refresh();
+
+// Live-update whenever the bot pushes a new trial row (start or end).
+sb.channel("coronet-trials-updates")
+  .on("postgres_changes", { event: "*", schema: "public", table: "coronet_trials" }, () => refresh())
+  .subscribe();
+</script>
+
+</body>
+</html>
