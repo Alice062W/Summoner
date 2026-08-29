@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warlock Auto — Orchestrator</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Same dark-fantasy palette as index.html/coronets.html, kept standalone
+     (no shared CSS file) — see coronets.html's own note, same reasoning
+     applies: zero dependency on the Summoner/Warlock bot-switcher. */
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 980px; margin: 2rem auto; padding: 0 1rem; background: #15110d; color: #d8c9a8; }
+  h2, h3, strong { font-family: 'Cinzel', serif; }
+  a { color: #f0d878; }
+  .panel { border: 1px solid #4a3a24; background: #1c1610; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+  .top-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 1rem; }
+  .back-link { font-size: 13px; }
+  .empty-state { text-align: center; padding: 1.5rem 1rem; color: #a8916a; font-size: 13px; }
+
+  select { background: #2a2018; color: #d8c9a8; border: 1px solid #4a3a24; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .controls label { font-size: 12px; color: #a8916a; }
+
+  .status-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .status-dot.green { background: #5a9c4a; box-shadow: 0 0 8px #5a9c4a; animation: pulse-green 1.6s ease-in-out infinite; }
+  .status-dot.gray { background: #6a5c48; box-shadow: none; }
+  @keyframes pulse-green { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .live-line { font-size: 16px; }
+  .live-sub { font-size: 12px; color: #a8916a; margin-top: 4px; }
+
+  .stat-row { display: flex; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+  .stat-box { flex: 1; min-width: 140px; background: linear-gradient(160deg, #3a2410, #221a12); border: 1px solid #6a5232; border-radius: 10px; padding: 10px 14px; }
+  .stat-box .stat-label { font-size: 12px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .stat-box .stat-value { font-size: 24px; font-weight: 700; color: #f0d878; font-family: 'Cinzel', serif; }
+
+  .breakdown-row { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .breakdown-box { flex: 1; min-width: 130px; background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 8px 12px; text-align: center; }
+  .breakdown-box .breakdown-label { font-size: 11px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .breakdown-box .breakdown-value { font-size: 19px; font-weight: 700; color: #d8c9a8; }
+  .breakdown-box.fcr { border-color: #378ADD; } .breakdown-box.fcr .breakdown-value { color: #6fb3f0; }
+  .breakdown-box.sockets { border-color: #1D9E75; } .breakdown-box.sockets .breakdown-value { color: #3ecf9a; }
+  .breakdown-box.amazon { border-color: #9C5FD8; } .breakdown-box.amazon .breakdown-value { color: #c39cf0; }
+
+  .loot-tally { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .loot-chip { background: #2a2018; border: 1px solid #4a3a24; border-radius: 20px; padding: 4px 12px; font-size: 12px; }
+
+  .section-h { margin: 0 0 10px; }
+
+  table.trial-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  table.trial-table th, table.trial-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #33291b; }
+  table.trial-table th { color: #a8916a; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .type-badge { display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+  .type-badge.farming { background: #2a3a24; color: #8fd878; }
+  .type-badge.betting { background: #3a2a24; color: #f0b878; }
+  .live-badge { color: #5a9c4a; font-weight: 700; }
+
+  @media (max-width: 640px) {
+    body { font-size: 15px; padding: 0 0.75rem; margin: 1rem auto; }
+    table.trial-table { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-row">
+  <h2 style="margin:0;">Warlock Auto — Orchestrator</h2>
+  <a class="back-link" href="index.html">&larr; Back to main dashboard</a>
+</div>
+
+<div class="panel">
+  <h3 class="section-h">Live Status</h3>
+  <div id="liveStatus" class="live-line"><span class="status-dot gray"></span>Loading…</div>
+  <div id="liveStatusSub" class="live-sub"></div>
+</div>
+
+<div class="panel">
+  <h3 class="section-h">Session</h3>
+  <div class="controls">
+    <label for="sessionPicker">Orchestrator session:</label>
+    <select id="sessionPicker"></select>
+  </div>
+  <div id="sessionBody"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Same pagination-safety note as coronets.html's fetchAllPages -- PostgREST
+// caps every .select() at 1000 rows server-side regardless of .limit().
+async function fetchAllPages(table, buildQuery, pageSize = 1000) {
+  let all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await buildQuery(sb.from(table).select("*")).range(from, from + pageSize - 1);
+    if (error) { console.error(error); return all; }
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+const LOOT_GROUPS = [
+  ["Runes", ["loot_rune"]],
+  ["Keys", ["loot_key", "loot_key_all"]],
+  ["Gems", ["loot_gem", "loot_gem_flawless", "loot_gem_perfect", "loot_gem_normal", "loot_gem_flawed", "loot_gem_chipped", "loot_skull", "loot_diamond"]],
+  ["Jewels", ["loot_jewel"]],
+  ["Charms", ["loot_charm"]],
+  ["Rings", ["loot_unique_ring"]],
+  ["Amulets", ["loot_unique_amulet"]],
+  ["Uniq. Boots", ["loot_unique_boot1", "loot_unique_boot2"]],
+  ["W. Shards", ["loot_worldstone_shard"]],
+  ["Set Items", ["loot_set_color"]],
+  ["Unique Items", ["loot_unique_color"]],
+  ["Gold", ["loot_gold"]],
+];
+const LOOT_ICONS = {
+  "Runes": "🪨", "Keys": "🔑", "Gems": "💎", "Jewels": "💠", "Charms": "🍀",
+  "Rings": "💍", "Amulets": "📿", "Uniq. Boots": "👢", "W. Shards": "✨",
+  "Set Items": "🟢", "Unique Items": "🟡", "Gold": "💰",
+};
+
+async function loadFarmingTrials() {
+  return fetchAllPages("warlock_trials", q =>
+    q.not("orchestrator_session_id", "is", null).order("started_at", { ascending: true })
+  );
+}
+
+async function loadBettingTrials() {
+  return fetchAllPages("coronet_trials", q =>
+    q.not("orchestrator_session_id", "is", null).order("started_at", { ascending: true })
+  );
+}
+
+async function loadRunsForTrials(trialIds) {
+  if (trialIds.length === 0) return [];
+  return fetchAllPages("warlock_runs", q => q.in("trial_id", trialIds));
+}
+
+// Groups both trial lists into { sessionId: { farming: [...], betting: [...] } },
+// sessions ordered newest-first by their earliest trial's started_at.
+function groupBySession(farmingTrials, bettingTrials) {
+  const sessions = {};
+  for (const t of farmingTrials) {
+    const sid = t.orchestrator_session_id;
+    (sessions[sid] ??= { farming: [], betting: [] }).farming.push(t);
+  }
+  for (const t of bettingTrials) {
+    const sid = t.orchestrator_session_id;
+    (sessions[sid] ??= { farming: [], betting: [] }).betting.push(t);
+  }
+  const ids = Object.keys(sessions).sort((a, b) => {
+    const aMin = Math.min(...[...sessions[a].farming, ...sessions[a].betting].map(t => new Date(t.started_at).getTime()));
+    const bMin = Math.min(...[...sessions[b].farming, ...sessions[b].betting].map(t => new Date(t.started_at).getTime()));
+    return bMin - aMin;
+  });
+  return { sessions, ids };
+}
+
+function fmtDur(startIso, endIso) {
+  if (!endIso) return "running";
+  const s = (new Date(endIso) - new Date(startIso)) / 1000;
+  return `${Math.floor(s / 60)}m${Math.round(s % 60).toString().padStart(2, "0")}s`;
+}
+
+function statsRowHtml(farming, betting) {
+  const totalGold = farming.reduce((s, t) => s + (t.gold_collected || 0), 0);
+  return `<div class="stat-row">
+    <div class="stat-box"><div class="stat-label">Farming Trials</div><div class="stat-value">${farming.length}</div></div>
+    <div class="stat-box"><div class="stat-label">Gold Collected (farming)</div><div class="stat-value">${totalGold.toLocaleString()}</div></div>
+    <div class="stat-box"><div class="stat-label">Betting Trials</div><div class="stat-value">${betting.length}</div></div>
+  </div>`;
+}
+
+function farmingStatsHtml(farming, runs) {
+  const totalRuns = runs.length;
+  const lootCounts = {};
+  for (const r of runs) {
+    for (const l of (r.loots || [])) {
+      const key = l.key || l.label || "?";
+      lootCounts[key] = (lootCounts[key] || 0) + 1;
+    }
+  }
+  const chips = LOOT_GROUPS.map(([group, keys]) => {
+    const total = keys.reduce((s, k) => s + (lootCounts[k] || 0), 0);
+    return total > 0 ? `<span class="loot-chip">${LOOT_ICONS[group] || ""} ${group}: ${total}</span>` : "";
+  }).filter(Boolean).join("");
+  return `<h3 class="section-h" style="margin-top:16px;">Farming (Trav) — Session Totals</h3>
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-label">Runs Completed</div><div class="stat-value">${totalRuns}</div></div>
+      <div class="stat-box"><div class="stat-label">Farming Trials</div><div class="stat-value">${farming.length}</div></div>
+    </div>
+    <div class="loot-tally">${chips || '<span class="empty-state" style="padding:4px 0;">No loot yet.</span>'}</div>`;
+}
+
+function bettingStatsHtml(betting) {
+  const sum = (f) => betting.reduce((s, t) => s + (t[f] || 0), 0);
+  const goldSpent = sum("gold_spent");
+  const refreshClicks = sum("refresh_clicks");
+  const bought = sum("coronets_bought");
+  const kept = sum("coronets_kept");
+  const sold = Math.max(0, bought - kept);
+  const fcr = sum("kept_fcr_skill");
+  const sockets = sum("kept_3sockets");
+  const amazon = sum("kept_amazon_llm");
+  return `<h3 class="section-h" style="margin-top:16px;">Betting (Coronet) — Session Totals</h3>
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-label">Betting Trials</div><div class="stat-value">${betting.length}</div></div>
+      <div class="stat-box"><div class="stat-label">Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-label">Coronets Bought</div><div class="stat-value">${bought.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Coronets Sold</div><div class="stat-value">${sold.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Coronets Kept</div><div class="stat-value">${kept.toLocaleString()}</div></div>
+    </div>
+    <div class="breakdown-row">
+      <div class="breakdown-box fcr"><div class="breakdown-label">FCR + Skill</div><div class="breakdown-value">${fcr}</div></div>
+      <div class="breakdown-box sockets"><div class="breakdown-label">3 Sockets</div><div class="breakdown-value">${sockets}</div></div>
+      <div class="breakdown-box amazon"><div class="breakdown-label">Amazon + LL/LM</div><div class="breakdown-value">${amazon}</div></div>
+    </div>`;
+}
+
+function trialListHtml(farming, betting) {
+  const rows = [
+    ...farming.map(t => ({ type: "farming", t })),
+    ...betting.map(t => ({ type: "betting", t })),
+  ].sort((a, b) => new Date(a.t.started_at) - new Date(b.t.started_at));
+
+  if (rows.length === 0) return `<div class="empty-state">No trials in this session yet.</div>`;
+
+  const trs = rows.map(({ type, t }, i) => {
+    // Ordinal within its own type, 1-based, in chronological order.
+    const ordinal = rows.slice(0, i + 1).filter(r => r.type === type).length;
+    const running = !t.ended_at;
+    const label = type === "farming"
+      ? `Farming #${ordinal}${running ? "" : ` — ${t.stop_reason || "-"}`}`
+      : `Betting #${ordinal}${running ? "" : ` — ${t.stop_reason || "-"}`}`;
+    const detail = type === "farming"
+      ? `${(t.gold_collected || 0).toLocaleString()} gold`
+      : `${(t.gold_spent || 0).toLocaleString()} spent, ${t.coronets_bought || 0} bought, ${t.coronets_kept || 0} kept`;
+    return `<tr>
+      <td><span class="type-badge ${type}">${type === "farming" ? "Farming" : "Betting"}</span></td>
+      <td>${label}${running ? ' <span class="live-badge">● running</span>' : ""}</td>
+      <td>${new Date(t.started_at).toLocaleString()}</td>
+      <td>${fmtDur(t.started_at, t.ended_at)}</td>
+      <td>${detail}</td>
+    </tr>`;
+  }).join("");
+
+  return `<table class="trial-table">
+    <thead><tr><th>Type</th><th>Trial</th><th>Started</th><th>Duration</th><th>Stats</th></tr></thead>
+    <tbody>${trs}</tbody>
+  </table>`;
+}
+
+async function renderSession(sessionId, sessions) {
+  const body = document.getElementById("sessionBody");
+  const session = sessions[sessionId];
+  if (!session) { body.innerHTML = `<div class="empty-state">Session not found.</div>`; return; }
+  body.innerHTML = `<div class="empty-state">Loading runs…</div>`;
+
+  const farmingIds = session.farming.map(t => t.trial_id);
+  const runs = await loadRunsForTrials(farmingIds);
+
+  body.innerHTML =
+    statsRowHtml(session.farming, session.betting) +
+    farmingStatsHtml(session.farming, runs) +
+    bettingStatsHtml(session.betting) +
+    `<h3 class="section-h" style="margin-top:16px;">Trials This Session</h3>` +
+    trialListHtml(session.farming, session.betting);
+}
+
+function populateSessionPicker(ids, sessions) {
+  const sel = document.getElementById("sessionPicker");
+  const prevValue = sel.value;
+  sel.innerHTML = "";
+  for (const sid of ids) {
+    const all = [...sessions[sid].farming, ...sessions[sid].betting];
+    const earliest = new Date(Math.min(...all.map(t => new Date(t.started_at).getTime())));
+    const live = all.some(t => !t.ended_at);
+    const opt = document.createElement("option");
+    opt.value = sid;
+    opt.textContent = `${earliest.toLocaleString()}${live ? " — live" : ""} (${sessions[sid].farming.length} farming, ${sessions[sid].betting.length} betting)`;
+    sel.appendChild(opt);
+  }
+  if (ids.includes(prevValue)) sel.value = prevValue;
+}
+
+function renderLiveStatus(ids, sessions) {
+  const dotEl = document.getElementById("liveStatus");
+  const subEl = document.getElementById("liveStatusSub");
+  if (ids.length === 0) {
+    dotEl.innerHTML = `<span class="status-dot gray"></span>No orchestrator sessions yet.`;
+    subEl.textContent = "";
+    return;
+  }
+  const latestId = ids[0];
+  const session = sessions[latestId];
+  const rows = [
+    ...session.farming.map(t => ({ type: "farming", t })),
+    ...session.betting.map(t => ({ type: "betting", t })),
+  ].sort((a, b) => new Date(a.t.started_at) - new Date(b.t.started_at));
+  const runningRow = rows.find(r => !r.t.ended_at);
+
+  if (!runningRow) {
+    const lastRow = rows[rows.length - 1];
+    dotEl.innerHTML = `<span class="status-dot gray"></span>Not running — last session ended.`;
+    subEl.textContent = lastRow ? `Last activity: ${new Date(lastRow.t.started_at).toLocaleString()}` : "";
+    return;
+  }
+
+  const ordinal = rows.filter(r => r.type === runningRow.type).indexOf(runningRow) + 1;
+  const ordSuffix = (n) => (n % 10 === 1 && n % 100 !== 11) ? "st"
+    : (n % 10 === 2 && n % 100 !== 12) ? "nd"
+    : (n % 10 === 3 && n % 100 !== 13) ? "rd" : "th";
+  const label = runningRow.type === "farming" ? "farming" : "betting";
+  dotEl.innerHTML = `<span class="status-dot green"></span>${ordinal}${ordSuffix(ordinal)} ${label} trial is running`;
+  subEl.textContent = `Session started ${new Date(rows[0].t.started_at).toLocaleString()} — `
+    + `${session.farming.length} farming, ${session.betting.length} betting trial(s) so far this session.`;
+}
+
+let _sessions = {};
+let _ids = [];
+
+async function refresh() {
+  const [farming, betting] = await Promise.all([loadFarmingTrials(), loadBettingTrials()]);
+  const grouped = groupBySession(farming, betting);
+  _sessions = grouped.sessions;
+  _ids = grouped.ids;
+  renderLiveStatus(_ids, _sessions);
+  populateSessionPicker(_ids, _sessions);
+  if (_ids.length > 0) {
+    const sel = document.getElementById("sessionPicker");
+    await renderSession(sel.value || _ids[0], _sessions);
+  } else {
+    document.getElementById("sessionBody").innerHTML = `<div class="empty-state">No orchestrator sessions yet.</div>`;
+  }
+}
+
+document.getElementById("sessionPicker").addEventListener("change", (e) => renderSession(e.target.value, _sessions));
+
+refresh();
+
+// Live-update whenever the orchestrator pushes a new trial row (start or end)
+// on either table.
+sb.channel("orchestrator-updates")
+  .on("postgres_changes", { event: "*", schema: "public", table: "warlock_trials" }, () => refresh())
+  .on("postgres_changes", { event: "*", schema: "public", table: "coronet_trials" }, () => refresh())
+  .subscribe();
+</script>
+
+</body>
+</html>
