@@ -133,6 +133,7 @@ function statsBlockHtml(rows) {
   const goldSpent = sumField(rows, "gold_spent");
   const bought = sumField(rows, "coronets_bought");
   const kept = sumField(rows, "coronets_kept");
+  const refreshClicks = sumField(rows, "refresh_clicks");
   const fcr = sumField(rows, "kept_fcr_skill");
   const sockets = sumField(rows, "kept_3sockets");
   const amazon = sumField(rows, "kept_amazon_llm");
@@ -140,6 +141,7 @@ function statsBlockHtml(rows) {
       <div class="stat-box"><div class="stat-label">Total Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Total Coronets Bought</div><div class="stat-value">${bought.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Total Coronets Kept</div><div class="stat-value">${kept.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Trials</div><div class="stat-value">${rows.length}</div></div>
     </div>
     <div class="breakdown-row">
@@ -211,6 +213,7 @@ function trialDetailHtml(r) {
     ? `<span class="strict-badge">Strict rule</span>` : `<span>General rule</span>`;
   return `<p class="trial-meta"><strong>Started:</strong> ${started} &nbsp; <strong>Ended:</strong> ${ended} &nbsp; ${strictBadge}</p>
     <p class="trial-meta"><strong>Stop reason:</strong> ${r.stop_reason || "-"}</p>
+    <p class="trial-meta"><strong>Refresh clicked:</strong> ${(r.refresh_clicks || 0).toLocaleString()}</p>
     ${statsBlockHtml([r])}`;
 }
 
