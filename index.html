@@ -1176,10 +1176,21 @@ const STOP_REASON_LABELS = {
   inventory_full: "inventory full",
   merc_resurrect_failed: "merc resurrection failed",
   game_enter_failed: "game enter failed (connection issue?)",
+  stopped_externally: "stopped externally (F12/exit/crash)",
 };
 
+// "completed" used to render as a blank suffix — every OTHER stop reason
+// gets an explanatory "(stopped: ...)" note, so a completed trial (the
+// good, common case) was the one state with no note at all next to the red
+// "not live" dot, which read as unexplained/alarming rather than as the
+// success it actually is (2026-08-29 user feedback). Every other reason
+// keeps its existing "(stopped: ...)" phrasing; this one intentionally
+// reads differently since nothing went wrong.
 function stopReasonSuffix(trial) {
-  if (!trial.ended_at || !trial.stop_reason || trial.stop_reason === "completed") return "";
+  if (!trial.ended_at) return "";
+  if (trial.stop_reason === "completed" || !trial.stop_reason) {
+    return " (all runs completed successfully)";
+  }
   return ` (stopped: ${STOP_REASON_LABELS[trial.stop_reason] || trial.stop_reason})`;
 }
 
