@@ -259,6 +259,7 @@
     <select id="trialPicker"><option value="">Choose a trial…</option></select>
     <button id="deleteTrialBtn" style="display:none;">Delete this trial</button>
     <p id="trialDetailProgress" style="margin:10px 0 0; font-size:14px;"></p>
+    <p id="trialDetailGold" style="margin:2px 0 0; font-size:13px; color:#a8916a;"></p>
     <p id="trialDetailStopReason" style="margin:2px 0 0; font-size:13px; color:#E24B4A;"></p>
     <div class="loot-tally" id="trialDetailLootTally"></div>
     <table class="run-table" style="margin-top:12px;">
@@ -1639,6 +1640,7 @@ async function populateTrialPicker() {
 function clearTrialDetail() {
   document.getElementById("trialDetailBody").innerHTML = "";
   document.getElementById("trialDetailProgress").textContent = "";
+  document.getElementById("trialDetailGold").textContent = "";
   document.getElementById("trialDetailStopReason").textContent = "";
   document.getElementById("trialDetailLootTally").innerHTML = "";
   document.getElementById("deleteTrialBtn").style.display = "none";
@@ -1653,6 +1655,16 @@ async function showTrialDetail(trialId) {
   const trial = trials.find(t => t.trial_id === trialId);
   const runs = await loadRunsForTrial(trialId);
   renderTrialSummary("trialDetailProgress", runs, trial ? trial.max_runs : null);
+  // gold_collected lives directly on the warlock_trials row (PATCHed
+  // throughout the trial by post_warlock_trial_progress — see
+  // dashboard_client.py), so it's already historical, not a live-only
+  // figure — just wasn't surfaced in the trial-detail picker until now.
+  const goldEl = document.getElementById("trialDetailGold");
+  if (goldEl) {
+    goldEl.textContent = (currentBot === "warlock" && trial && trial.gold_collected != null)
+      ? `💰 Gold collected: ${Number(trial.gold_collected).toLocaleString()}`
+      : "";
+  }
   document.getElementById("trialDetailStopReason").textContent = trial ? stopReasonSuffix(trial).trim() : "";
   renderLootTally(runs, "trialDetailLootTally");
   if (currentBot === "warlock") {
