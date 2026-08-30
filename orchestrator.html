@@ -167,6 +167,22 @@ function fmtDur(startIso, endIso) {
   return `${Math.floor(s / 60)}m${Math.round(s % 60).toString().padStart(2, "0")}s`;
 }
 
+// Duration of one trial in seconds — a still-running trial (ended_at null)
+// counts up to "now", same convention fmtDur() above uses for display.
+// Used for AGGREGATE totals across a session (fmtDur alone can't sum,
+// since it returns "running" instead of a number for an open trial).
+function trialDurationSec(t) {
+  const end = t.ended_at ? new Date(t.ended_at) : new Date();
+  return Math.max(0, (end - new Date(t.started_at)) / 1000);
+}
+
+function fmtDurSeconds(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = Math.round(totalSec % 60);
+  return h > 0 ? `${h}h${m}m` : `${m}m${s.toString().padStart(2, "0")}s`;
+}
+
 function statsRowHtml(farming, betting) {
   const totalGold = farming.reduce((s, t) => s + (t.gold_collected || 0), 0);
   return `<div class="stat-row">
@@ -210,11 +226,18 @@ function bettingStatsHtml(betting) {
   const fcr = sum("kept_fcr_skill");
   const sockets = sum("kept_3sockets");
   const amazon = sum("kept_amazon_llm");
+  // Sums every betting trial's own duration (a still-running one counts up
+  // to "now") — works the same whether `betting` is the live session's
+  // trials or a historical session picked from the dropdown, since both
+  // just pass in whatever set of trials belongs to that session. Per user
+  // request 2026-08-30.
+  const totalTimeSec = betting.reduce((s, t) => s + trialDurationSec(t), 0);
   return `<h3 class="section-h" style="margin-top:16px;">Betting (Coronet) — Session Totals</h3>
     <div class="stat-row">
       <div class="stat-box"><div class="stat-label">Betting Trials</div><div class="stat-value">${betting.length}</div></div>
       <div class="stat-box"><div class="stat-label">Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Total Time Spent</div><div class="stat-value">${fmtDurSeconds(totalTimeSec)}</div></div>
     </div>
     <div class="stat-row">
       <div class="stat-box"><div class="stat-label">Coronets Bought</div><div class="stat-value">${bought.toLocaleString()}</div></div>
