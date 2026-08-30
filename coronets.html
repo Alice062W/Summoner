@@ -129,6 +129,25 @@ function sumField(rows, field) {
   return rows.reduce((s, r) => s + (r[field] || 0), 0);
 }
 
+// Duration of one trial in seconds — a still-running trial (ended_at null)
+// counts up to "now", same convention as fmtDur() on the orchestrator page.
+function trialDurationSec(r) {
+  const end = r.ended_at ? new Date(r.ended_at) : new Date();
+  return Math.max(0, (end - new Date(r.started_at)) / 1000);
+}
+
+function fmtDurSeconds(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = Math.round(totalSec % 60);
+  return h > 0 ? `${h}h${m}m` : `${m}m${s.toString().padStart(2, "0")}s`;
+}
+
+// Used for both the "Stats — Selected Period" panel (rows = every trial in
+// the filtered range) and the single-trial detail view (rows = [r]) — in
+// the latter case summing one row's own duration IS that trial's total
+// time, so "Total Time Spent" here doubles as "this trial's duration" with
+// no separate code path needed, per user request 2026-08-30.
 function statsBlockHtml(rows) {
   if (rows.length === 0) {
     return `<div class="empty-state">No trials in this period.</div>`;
@@ -140,11 +159,13 @@ function statsBlockHtml(rows) {
   const fcr = sumField(rows, "kept_fcr_skill");
   const sockets = sumField(rows, "kept_3sockets");
   const amazon = sumField(rows, "kept_amazon_llm");
+  const totalTimeSec = rows.reduce((s, r) => s + trialDurationSec(r), 0);
   return `<div class="stat-row">
       <div class="stat-box"><div class="stat-label">Total Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Total Coronets Bought</div><div class="stat-value">${bought.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Trials</div><div class="stat-value">${rows.length}</div></div>
+      <div class="stat-box"><div class="stat-label">Total Time Spent</div><div class="stat-value">${fmtDurSeconds(totalTimeSec)}</div></div>
     </div>
     <div class="breakdown-row">
       <div class="breakdown-box"><div class="breakdown-label">Total Coronets Kept</div><div class="breakdown-value">${kept.toLocaleString()}</div></div>

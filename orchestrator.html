@@ -245,7 +245,7 @@ function trialListHtml(farming, betting) {
       : `Betting #${ordinal}${running ? "" : ` — ${t.stop_reason || "-"}`}`;
     const detail = type === "farming"
       ? `${(t.gold_collected || 0).toLocaleString()} gold`
-      : `${(t.gold_spent || 0).toLocaleString()} spent, ${t.coronets_bought || 0} bought, ${t.coronets_kept || 0} kept`;
+      : `${(t.gold_spent || 0).toLocaleString()} spent, ${t.coronets_bought || 0} bought, ${t.coronets_kept || 0} kept, ${fmtDur(t.started_at, t.ended_at)}`;
     return `<tr>
       <td><span class="type-badge ${type}">${type === "farming" ? "Farming" : "Betting"}</span></td>
       <td>${label}${running ? ' <span class="live-badge">● running</span>' : ""}</td>
