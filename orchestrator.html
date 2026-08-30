@@ -178,6 +178,8 @@ function statsRowHtml(farming, betting) {
 
 function farmingStatsHtml(farming, runs) {
   const totalRuns = runs.length;
+  const totalGold = farming.reduce((s, t) => s + (t.gold_collected || 0), 0);
+  const goldPerRun = totalRuns > 0 ? Math.round(totalGold / totalRuns) : 0;
   const lootCounts = {};
   for (const r of runs) {
     for (const l of (r.loots || [])) {
@@ -192,6 +194,7 @@ function farmingStatsHtml(farming, runs) {
   return `<h3 class="section-h" style="margin-top:16px;">Farming (Trav) — Session Totals</h3>
     <div class="stat-row">
       <div class="stat-box"><div class="stat-label">Runs Completed</div><div class="stat-value">${totalRuns}</div></div>
+      <div class="stat-box"><div class="stat-label">Gold / Run</div><div class="stat-value">${goldPerRun.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Farming Trials</div><div class="stat-value">${farming.length}</div></div>
     </div>
     <div class="loot-tally">${chips || '<span class="empty-state" style="padding:4px 0;">No loot yet.</span>'}</div>`;

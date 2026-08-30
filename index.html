@@ -1419,7 +1419,7 @@ function renderRatioStats(elId, runs, mercRevivals) {
 // attempted-only denominator for 🌀 (excludes stash_restart runs from the
 // WP total) — this dashboard function intentionally no longer mirrors it
 // 1:1; update gui_app.py too (needs a bot rebuild) if you want them to match.
-function renderWarlockRatioStats(elId, runs, mercRevivals) {
+function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected) {
   const total = runs.length;
   const success = runs.filter(r => r.result === "success").length;
   const stashRestart = runs.filter(r => r.result === "stash_restart").length;
@@ -1428,11 +1428,16 @@ function renderWarlockRatioStats(elId, runs, mercRevivals) {
   const stashFail = runs.filter(r => r.stash_result === "fail").length;
   const stashTotal = stashSuccess + stashFail;
   const connFailed = runs.filter(r => r.connection_failed).length;
+  // gold_collected lives on the trial row (see index.html's warlock_trials
+  // gold_collected note) — total collected so far this trial divided by
+  // runs completed so far, per user request 2026-08-29.
+  const goldPerRun = total > 0 ? Math.round((goldCollected || 0) / total) : 0;
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `🌀 ${wpFail}/${total} (${pct(wpFail, total)}%) · ` +
     `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
-    `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}/${total} (${pct(stashRestart, total)}%)` +
+    `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}/${total} (${pct(stashRestart, total)}%) · ` +
+    `💰 ${goldPerRun.toLocaleString()}/run` +
     (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
 }
 
@@ -1568,7 +1573,7 @@ async function refreshLive() {
   }
 
   if (currentBot === "warlock") {
-    renderWarlockRatioStats("liveRatios", runs, trial.merc_revivals);
+    renderWarlockRatioStats("liveRatios", runs, trial.merc_revivals, trial.gold_collected);
   } else {
     renderRatioStats("liveRatios", runs, trial.merc_revivals);
   }
