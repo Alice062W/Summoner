@@ -52,7 +52,10 @@
 
 <div class="top-row">
   <h2 style="margin:0;">Warlock_bet — Coronet Gambling</h2>
-  <a class="back-link" href="index.html">&larr; Back to main dashboard</a>
+  <div style="text-align:right;">
+    <a class="back-link" href="index.html">&larr; Back to main dashboard</a>
+    <div id="lastUpdated" class="trial-meta" style="margin-top:2px;"></div>
+  </div>
 </div>
 
 <div class="panel">
@@ -231,6 +234,11 @@ async function refresh() {
   document.getElementById("periodStats").innerHTML = statsBlockHtml(_lastTrials);
   renderHistoryChart(_lastTrials);
   populateTrialPicker(_lastTrials);
+  // Stamped on every refresh — both the initial load and the live
+  // postgres_changes push below — so it's obvious at a glance whether
+  // what's on screen is current, per user request 2026-08-30.
+  document.getElementById("lastUpdated").textContent =
+    "Last updated: " + new Date().toLocaleString();
 }
 
 document.getElementById("rangeFilter").addEventListener("change", refresh);
