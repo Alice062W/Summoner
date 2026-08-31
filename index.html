@@ -1419,7 +1419,7 @@ function renderRatioStats(elId, runs, mercRevivals) {
 // attempted-only denominator for 🌀 (excludes stash_restart runs from the
 // WP total) — this dashboard function intentionally no longer mirrors it
 // 1:1; update gui_app.py too (needs a bot rebuild) if you want them to match.
-function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected) {
+function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapsedHours) {
   const total = runs.length;
   const success = runs.filter(r => r.result === "success").length;
   const stashRestart = runs.filter(r => r.result === "stash_restart").length;
@@ -1432,12 +1432,19 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected) {
   // gold_collected note) — total collected so far this trial divided by
   // runs completed so far, per user request 2026-08-29.
   const goldPerRun = total > 0 ? Math.round((goldCollected || 0) / total) : 0;
+  // gold/hr and runs/hr — rate stats over the trial's elapsed wall-clock
+  // time (still-running trials use "now" as the end, so these climb live),
+  // per user request 2026-08-30.
+  const goldPerHour = elapsedHours > 0 ? Math.round((goldCollected || 0) / elapsedHours) : 0;
+  const runsPerHour = elapsedHours > 0 ? Math.round(total / elapsedHours) : 0;
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `🌀 ${wpFail}/${total} (${pct(wpFail, total)}%) · ` +
     `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
     `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}/${total} (${pct(stashRestart, total)}%) · ` +
-    `💰 ${goldPerRun.toLocaleString()}/run` +
+    `💰 ${goldPerRun.toLocaleString()}/run · ` +
+    `🪙 ${goldPerHour.toLocaleString()}/hr · ` +
+    `⚡ ${runsPerHour.toLocaleString()}/hr` +
     (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
 }
 
@@ -1573,7 +1580,11 @@ async function refreshLive() {
   }
 
   if (currentBot === "warlock") {
-    renderWarlockRatioStats("liveRatios", runs, trial.merc_revivals, trial.gold_collected);
+    {
+      const endTime = trial.ended_at ? new Date(trial.ended_at) : new Date();
+      const elapsedHours = (endTime - new Date(trial.started_at)) / 3600000;
+      renderWarlockRatioStats("liveRatios", runs, trial.merc_revivals, trial.gold_collected, elapsedHours);
+    }
   } else {
     renderRatioStats("liveRatios", runs, trial.merc_revivals);
   }

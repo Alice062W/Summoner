@@ -196,6 +196,12 @@ function farmingStatsHtml(farming, runs) {
   const totalRuns = runs.length;
   const totalGold = farming.reduce((s, t) => s + (t.gold_collected || 0), 0);
   const goldPerRun = totalRuns > 0 ? Math.round(totalGold / totalRuns) : 0;
+  // gold/hr and runs/hr over the session's total farming-trial time (each
+  // trial's own duration summed — a still-running trial counts up to
+  // "now", so these climb live), per user request 2026-08-30.
+  const elapsedHours = farming.reduce((s, t) => s + trialDurationSec(t), 0) / 3600;
+  const goldPerHour = elapsedHours > 0 ? Math.round(totalGold / elapsedHours) : 0;
+  const runsPerHour = elapsedHours > 0 ? Math.round(totalRuns / elapsedHours) : 0;
   const lootCounts = {};
   for (const r of runs) {
     for (const l of (r.loots || [])) {
@@ -212,6 +218,10 @@ function farmingStatsHtml(farming, runs) {
       <div class="stat-box"><div class="stat-label">Runs Completed</div><div class="stat-value">${totalRuns}</div></div>
       <div class="stat-box"><div class="stat-label">Gold / Run</div><div class="stat-value">${goldPerRun.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Farming Trials</div><div class="stat-value">${farming.length}</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-label">🪙 Gold / Hour</div><div class="stat-value">${goldPerHour.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">⚡ Runs / Hour</div><div class="stat-value">${runsPerHour.toLocaleString()}</div></div>
     </div>
     <div class="loot-tally">${chips || '<span class="empty-state" style="padding:4px 0;">No loot yet.</span>'}</div>`;
 }
