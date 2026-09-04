@@ -219,6 +219,7 @@
     <div class="card"><p>Total trials</p><p id="statTrials">-</p></div>
     <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
     <div class="card"><p id="statCard4Label">Avg runs / key</p><p id="statRunsPerKey">-</p></div>
+    <div class="card" id="statChronicleCard" style="display:none;"><p>📜 Runs w/ Chronicle Kept</p><p id="statChronicleKept">-</p></div>
   </div>
 
   <details class="panel" id="lootLineChartPanel">
@@ -261,6 +262,7 @@
     <button id="deleteTrialBtn" style="display:none;">Delete this trial</button>
     <p id="trialDetailProgress" style="margin:10px 0 0; font-size:14px;"></p>
     <p id="trialDetailGold" style="margin:2px 0 0; font-size:13px; color:#a8916a;"></p>
+    <p id="trialDetailRatios" style="margin:2px 0 0; font-size:13px; color:#a8916a;"></p>
     <p id="trialDetailStopReason" style="margin:2px 0 0; font-size:13px; color:#E24B4A;"></p>
     <div class="loot-tally" id="trialDetailLootTally"></div>
     <table class="run-table" style="margin-top:12px;">
@@ -404,6 +406,7 @@ function initBotUI() {
   document.getElementById("historyKeyCountsPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("runeStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
+  document.getElementById("statChronicleCard").style.display = isWarlock ? "" : "none";
   document.getElementById("lootCountChartPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("lootDurationChartPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
@@ -721,6 +724,8 @@ function renderStats(runStats, trialCount, runs = []) {
   document.getElementById("statAvgTime").textContent =
     runCount === 0 ? "-" : fmtSeconds(Number(runStats.avg_duration_seconds) || 0);
   if (currentBot === "warlock") {
+    document.getElementById("statRunsPerKey").textContent =
+      `🧟 ${_lastMercRevivals} · 🧺❌ ${Number(runStats.stash_fail_count) || 0}`;
     // Chronicle (collection-log) — how many runs in the selected period
     // kept at least one new item, not a per-item count (see
     // warlock_logic.py _chronicle_check_deposit_zone's docstring for why),
@@ -730,10 +735,8 @@ function renderStats(runStats, trialCount, runs = []) {
     // upgraded to server-side specifically because loadRuns() truncates
     // past 1000 rows, a threshold this feature isn't expected to hit any
     // time soon).
-    const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
-    const chronicleStr = chronicleKeptRuns > 0 ? ` · 📜 ${chronicleKeptRuns} run(s) kept` : "";
-    document.getElementById("statRunsPerKey").textContent =
-      `🧟 ${_lastMercRevivals} · 🧺❌ ${Number(runStats.stash_fail_count) || 0}${chronicleStr}`;
+    document.getElementById("statChronicleKept").textContent =
+      runs.filter(r => r.chronicle_kept).length;
   } else {
     const keyRunCount = Number(runStats.key_run_count) || 0;
     document.getElementById("statRunsPerKey").textContent =
@@ -1453,7 +1456,6 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapse
   // _chronicle_check_deposit_zone's docstring for why), per user request
   // 2026-09-04.
   const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
-  const chronicleStr = chronicleKeptRuns > 0 ? ` · 📜 ${chronicleKeptRuns} run(s) kept` : "";
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `🌀 ${wpFail}/${total} (${pct(wpFail, total)}%) · ` +
@@ -1461,8 +1463,8 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapse
     `🧟 ${mercRevivals ?? 0} · 🧺❌ ${stashRestart}/${total} (${pct(stashRestart, total)}%) · ` +
     `💰 ${goldPerRun.toLocaleString()}/run · ` +
     `🪙 ${goldPerHour.toLocaleString()}/hr · ` +
-    `⚡ ${runsPerHour.toLocaleString()}/hr` +
-    chronicleStr +
+    `⚡ ${runsPerHour.toLocaleString()}/hr · ` +
+    `📜 ${chronicleKeptRuns}` +
     (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
 }
 
@@ -1549,12 +1551,18 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
     const connFailedIcon = r.connection_failed
       ? `<span title="connection-failed dialog auto-dismissed before this run">🔌</span> `
       : "";
+    // Chronicle (collection-log) — same "prestep icon alongside the run's
+    // real status" treatment as revivedIcon/connFailedIcon above, per user
+    // request 2026-09-04.
+    const chronicleIcon = r.chronicle_kept
+      ? `<span title="kept a new Chronicle item this run">📜</span> `
+      : "";
 
     if (isWpFail) {
       summaryRow.innerHTML =
         `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
         `<td data-label="run">#${r.run_num}</td>` +
-        `<td data-label="status" style="color:#888780;" title="WP not found">${revivedIcon}${connFailedIcon}🌀</td>` +
+        `<td data-label="status" style="color:#888780;" title="WP not found">${revivedIcon}${connFailedIcon}${chronicleIcon}🌀</td>` +
         `<td data-label="loot">-</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     } else {
       const statusIcon = isStashRestart
@@ -1562,7 +1570,7 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
         : `<span title="success">✅</span>`;
       summaryRow.innerHTML =
         `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
-        `<td data-label="run">#${r.run_num}</td><td data-label="status">${revivedIcon}${connFailedIcon}${statusIcon}</td>` +
+        `<td data-label="run">#${r.run_num}</td><td data-label="status">${revivedIcon}${connFailedIcon}${chronicleIcon}${statusIcon}</td>` +
         `<td data-label="loot">${loot}</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     }
     tbody.appendChild(summaryRow);
@@ -1695,6 +1703,7 @@ function clearTrialDetail() {
   document.getElementById("trialDetailBody").innerHTML = "";
   document.getElementById("trialDetailProgress").textContent = "";
   document.getElementById("trialDetailGold").textContent = "";
+  document.getElementById("trialDetailRatios").textContent = "";
   document.getElementById("trialDetailStopReason").textContent = "";
   document.getElementById("trialDetailLootTally").innerHTML = "";
   document.getElementById("deleteTrialBtn").style.display = "none";
@@ -1723,6 +1732,14 @@ async function showTrialDetail(trialId) {
   renderLootTally(runs, "trialDetailLootTally");
   if (currentBot === "warlock") {
     renderWarlockRunFeed("trialDetailBody", runs, "histDetail");
+    // Same ratio-stats line the Live page shows for the current trial (✅/
+    // 🌀/📥/🧟/🧺❌/💰/🪙/⚡/📜), per user request 2026-09-04 — this
+    // trial's own started_at/ended_at (or "now" if somehow still open)
+    // stands in for the live elapsedHours calculation.
+    const endTime = trial && trial.ended_at ? new Date(trial.ended_at) : new Date();
+    const elapsedHours = trial && trial.started_at ? (endTime - new Date(trial.started_at)) / 3600000 : 0;
+    renderWarlockRatioStats("trialDetailRatios", runs, trial ? trial.merc_revivals : 0,
+                             trial ? trial.gold_collected : 0, elapsedHours);
   } else {
     renderRunFeed("trialDetailBody", runs, "histDetail");
   }
