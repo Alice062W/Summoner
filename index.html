@@ -721,18 +721,17 @@ function renderStats(runStats, trialCount, runs = []) {
   document.getElementById("statAvgTime").textContent =
     runCount === 0 ? "-" : fmtSeconds(Number(runStats.avg_duration_seconds) || 0);
   if (currentBot === "warlock") {
-    // Chronicle (collection-log) totals for the selected period — summed
-    // client-side from the already-fetched, range/hour-filtered runs
-    // (same convention as the loot tally/duration charts below, not the
-    // gold_collected/merc_revivals RPC sums above — those were upgraded to
-    // server-side specifically because loadRuns() truncates past 1000 rows,
-    // a threshold this feature isn't expected to hit any time soon).
-    const cSum = (field) => runs.reduce((s, r) => s + (r[field] || 0), 0);
-    const cSetKept = cSum("chronicle_set_kept"), cSetDropped = cSum("chronicle_set_dropped");
-    const cUniqKept = cSum("chronicle_unique_kept"), cUniqDropped = cSum("chronicle_unique_dropped");
-    const chronicleStr = (cSetKept || cSetDropped || cUniqKept || cUniqDropped)
-      ? ` · 📜 Set ${cSetKept}/${cSetDropped}dup · Unique ${cUniqKept}/${cUniqDropped}dup`
-      : "";
+    // Chronicle (collection-log) — how many runs in the selected period
+    // kept at least one new item, not a per-item count (see
+    // warlock_logic.py _chronicle_check_deposit_zone's docstring for why),
+    // summed client-side from the already-fetched, range/hour-filtered
+    // runs (same convention as the loot tally/duration charts below, not
+    // the gold_collected/merc_revivals RPC sums above — those were
+    // upgraded to server-side specifically because loadRuns() truncates
+    // past 1000 rows, a threshold this feature isn't expected to hit any
+    // time soon).
+    const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
+    const chronicleStr = chronicleKeptRuns > 0 ? ` · 📜 ${chronicleKeptRuns} run(s) kept` : "";
     document.getElementById("statRunsPerKey").textContent =
       `🧟 ${_lastMercRevivals} · 🧺❌ ${Number(runStats.stash_fail_count) || 0}${chronicleStr}`;
   } else {
@@ -1449,14 +1448,12 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapse
   // per user request 2026-08-30.
   const goldPerHour = elapsedHours > 0 ? Math.round((goldCollected || 0) / elapsedHours) : 0;
   const runsPerHour = elapsedHours > 0 ? Math.round(total / elapsedHours) : 0;
-  // Chronicle (collection-log) totals for this trial so far — summed from
-  // the already-fetched runs, per user request 2026-08-31.
-  const cSum = (field) => runs.reduce((s, r) => s + (r[field] || 0), 0);
-  const cSetKept = cSum("chronicle_set_kept"), cSetDropped = cSum("chronicle_set_dropped");
-  const cUniqKept = cSum("chronicle_unique_kept"), cUniqDropped = cSum("chronicle_unique_dropped");
-  const chronicleStr = (cSetKept || cSetDropped || cUniqKept || cUniqDropped)
-    ? ` · 📜 Set ${cSetKept}/${cSetDropped}dup · Unique ${cUniqKept}/${cUniqDropped}dup`
-    : "";
+  // Chronicle (collection-log) — how many runs this trial kept at least
+  // one new item, not a per-item count (see warlock_logic.py
+  // _chronicle_check_deposit_zone's docstring for why), per user request
+  // 2026-09-04.
+  const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
+  const chronicleStr = chronicleKeptRuns > 0 ? ` · 📜 ${chronicleKeptRuns} run(s) kept` : "";
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `🌀 ${wpFail}/${total} (${pct(wpFail, total)}%) · ` +
@@ -1500,13 +1497,11 @@ function renderWarlockDetailHtml(run) {
     : "↷ bypass (nothing to deposit)";
   const durationLabel = fmtSeconds((new Date(run.ended_at) - new Date(run.started_at)) / 1000);
   const startedLabel = run.started_at ? new Date(run.started_at).toLocaleString() : "?";
-  // Chronicle (collection-log) breakdown for this run — only shown when
-  // Stage 1 actually touched something (see warlock_logic.py's
-  // _chronicle_check_deposit_zone), per user request 2026-08-31.
-  const cSetKept = run.chronicle_set_kept || 0, cSetDropped = run.chronicle_set_dropped || 0;
-  const cUniqKept = run.chronicle_unique_kept || 0, cUniqDropped = run.chronicle_unique_dropped || 0;
-  const chronicleHtml = (cSetKept || cSetDropped || cUniqKept || cUniqDropped)
-    ? `<div style="margin-top:4px;"><strong>📜 Chronicle:</strong> Set ${cSetKept} kept/${cSetDropped} dup · Unique ${cUniqKept} kept/${cUniqDropped} dup</div>`
+  // Chronicle (collection-log) — a simple yes/no per run, not a count (see
+  // warlock_logic.py's _chronicle_check_deposit_zone docstring for why),
+  // per user request 2026-09-04.
+  const chronicleHtml = run.chronicle_kept
+    ? `<div style="margin-top:4px;"><strong>📜 Chronicle:</strong> New item kept this run</div>`
     : "";
   return `
     <div><strong>Started:</strong> ${startedLabel}</div>

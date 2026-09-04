@@ -202,6 +202,11 @@ function farmingStatsHtml(farming, runs) {
   const elapsedHours = farming.reduce((s, t) => s + trialDurationSec(t), 0) / 3600;
   const goldPerHour = elapsedHours > 0 ? Math.round(totalGold / elapsedHours) : 0;
   const runsPerHour = elapsedHours > 0 ? Math.round(totalRuns / elapsedHours) : 0;
+  // Chronicle (collection-log) — how many runs this session kept at least
+  // one new item, not a per-item count (see warlock_logic.py
+  // _chronicle_check_deposit_zone's docstring for why), per user request
+  // 2026-09-04.
+  const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
   const lootCounts = {};
   for (const r of runs) {
     for (const l of (r.loots || [])) {
@@ -222,6 +227,7 @@ function farmingStatsHtml(farming, runs) {
     <div class="stat-row">
       <div class="stat-box"><div class="stat-label">🪙 Gold / Hour</div><div class="stat-value">${goldPerHour.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">⚡ Runs / Hour</div><div class="stat-value">${runsPerHour.toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">📜 Runs w/ Chronicle Kept</div><div class="stat-value">${chronicleKeptRuns}</div></div>
     </div>
     <div class="loot-tally">${chips || '<span class="empty-state" style="padding:4px 0;">No loot yet.</span>'}</div>`;
 }
