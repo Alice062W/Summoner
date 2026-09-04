@@ -42,6 +42,7 @@
   .breakdown-box.fcr { border-color: #378ADD; } .breakdown-box.fcr .breakdown-value { color: #6fb3f0; }
   .breakdown-box.sockets { border-color: #1D9E75; } .breakdown-box.sockets .breakdown-value { color: #3ecf9a; }
   .breakdown-box.amazon { border-color: #9C5FD8; } .breakdown-box.amazon .breakdown-value { color: #c39cf0; }
+  .breakdown-box.fwr { border-color: #E0A030; } .breakdown-box.fwr .breakdown-value { color: #f0c26a; }
 
   .loot-tally { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .loot-chip { background: #2a2018; border: 1px solid #4a3a24; border-radius: 20px; padding: 4px 12px; font-size: 12px; }
@@ -242,6 +243,7 @@ function bettingStatsHtml(betting) {
   const fcr = sum("kept_fcr_skill");
   const sockets = sum("kept_3sockets");
   const amazon = sum("kept_amazon_llm");
+  const fwr = sum("kept_fwr");
   // Sums every betting trial's own duration (a still-running one counts up
   // to "now") — works the same whether `betting` is the live session's
   // trials or a historical session picked from the dropdown, since both
@@ -264,6 +266,7 @@ function bettingStatsHtml(betting) {
       <div class="breakdown-box fcr"><div class="breakdown-label">FCR + Skill</div><div class="breakdown-value">${fcr}</div></div>
       <div class="breakdown-box sockets"><div class="breakdown-label">3 Sockets</div><div class="breakdown-value">${sockets}</div></div>
       <div class="breakdown-box amazon"><div class="breakdown-label">Amazon + LL/LM</div><div class="breakdown-value">${amazon}</div></div>
+      <div class="breakdown-box fwr"><div class="breakdown-label">FWR + Skill</div><div class="breakdown-value">${fwr}</div></div>
     </div>`;
 }
 

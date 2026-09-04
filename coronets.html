@@ -37,6 +37,7 @@
   .breakdown-box.fcr { border-color: #378ADD; } .breakdown-box.fcr .breakdown-value { color: #6fb3f0; }
   .breakdown-box.sockets { border-color: #1D9E75; } .breakdown-box.sockets .breakdown-value { color: #3ecf9a; }
   .breakdown-box.amazon { border-color: #9C5FD8; } .breakdown-box.amazon .breakdown-value { color: #c39cf0; }
+  .breakdown-box.fwr { border-color: #E0A030; } .breakdown-box.fwr .breakdown-value { color: #f0c26a; }
 
   canvas#coronetHistoryChart { max-height: 320px; }
 
@@ -159,6 +160,7 @@ function statsBlockHtml(rows) {
   const fcr = sumField(rows, "kept_fcr_skill");
   const sockets = sumField(rows, "kept_3sockets");
   const amazon = sumField(rows, "kept_amazon_llm");
+  const fwr = sumField(rows, "kept_fwr");
   const totalTimeSec = rows.reduce((s, r) => s + trialDurationSec(r), 0);
   return `<div class="stat-row">
       <div class="stat-box"><div class="stat-label">Total Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
@@ -172,6 +174,7 @@ function statsBlockHtml(rows) {
       <div class="breakdown-box fcr"><div class="breakdown-label">FCR + Skill</div><div class="breakdown-value">${fcr}</div></div>
       <div class="breakdown-box sockets"><div class="breakdown-label">3 Sockets</div><div class="breakdown-value">${sockets}</div></div>
       <div class="breakdown-box amazon"><div class="breakdown-label">Amazon + LL/LM</div><div class="breakdown-value">${amazon}</div></div>
+      <div class="breakdown-box fwr"><div class="breakdown-label">FWR + Skill</div><div class="breakdown-value">${fwr}</div></div>
     </div>`;
 }
 
@@ -199,6 +202,7 @@ function renderHistoryChart(rows) {
         { label: "FCR + Skill", data: rows.map(r => r.kept_fcr_skill || 0), borderColor: "#378ADD", backgroundColor: "#378ADD", tension: 0.25 },
         { label: "3 Sockets", data: rows.map(r => r.kept_3sockets || 0), borderColor: "#1D9E75", backgroundColor: "#1D9E75", tension: 0.25 },
         { label: "Amazon + LL/LM", data: rows.map(r => r.kept_amazon_llm || 0), borderColor: "#9C5FD8", backgroundColor: "#9C5FD8", tension: 0.25 },
+        { label: "FWR + Skill", data: rows.map(r => r.kept_fwr || 0), borderColor: "#E0A030", backgroundColor: "#E0A030", tension: 0.25 },
         { label: "Bought", data: rows.map(r => r.coronets_bought || 0), borderColor: "#a8916a", backgroundColor: "#a8916a", tension: 0.25, hidden: true },
       ],
     },
