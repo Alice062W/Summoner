@@ -224,6 +224,7 @@ function farmingStatsHtml(farming, runs) {
       <div class="stat-box"><div class="stat-label">Runs Completed</div><div class="stat-value">${totalRuns}</div></div>
       <div class="stat-box"><div class="stat-label">Gold / Run</div><div class="stat-value">${goldPerRun.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Farming Trials</div><div class="stat-value">${farming.length}</div></div>
+      <div class="stat-box"><div class="stat-label">Total Time Spent</div><div class="stat-value">${fmtDurSeconds(elapsedHours * 3600)}</div></div>
     </div>
     <div class="stat-row">
       <div class="stat-box"><div class="stat-label">🪙 Gold / Hour</div><div class="stat-value">${goldPerHour.toLocaleString()}</div></div>
