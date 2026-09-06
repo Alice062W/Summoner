@@ -218,6 +218,7 @@
     <div class="card"><p>Total runs</p><p id="statRuns">-</p></div>
     <div class="card"><p>Total trials</p><p id="statTrials">-</p></div>
     <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
+    <div class="card" id="statTotalTimeCard" style="display:none;"><p>Total Time Spent</p><p id="statTotalTime">-</p></div>
     <div class="card"><p id="statCard4Label">Avg runs / key</p><p id="statRunsPerKey">-</p></div>
     <div class="card" id="statChronicleCard" style="display:none;"><p>📜 Runs w/ Chronicle Kept</p><p id="statChronicleKept">-</p></div>
   </div>
@@ -407,6 +408,7 @@ function initBotUI() {
   document.getElementById("runeStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("statChronicleCard").style.display = isWarlock ? "" : "none";
+  document.getElementById("statTotalTimeCard").style.display = isWarlock ? "" : "none";
   document.getElementById("lootCountChartPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("lootDurationChartPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
@@ -726,6 +728,11 @@ function renderStats(runStats, trialCount, runs = []) {
   if (currentBot === "warlock") {
     document.getElementById("statRunsPerKey").textContent =
       `🧟 ${_lastMercRevivals} · 🧺❌ ${Number(runStats.stash_fail_count) || 0}`;
+    // Total farming time within the selected period — derived from the
+    // already-fetched avg_duration_seconds * run_count (exact, since avg is
+    // sum/count) rather than a new RPC field, per user request 2026-09-06.
+    document.getElementById("statTotalTime").textContent =
+      runCount === 0 ? "-" : fmtSeconds((Number(runStats.avg_duration_seconds) || 0) * runCount);
     // Chronicle (collection-log) — how many runs in the selected period
     // kept at least one new item, not a per-item count (see
     // warlock_logic.py _chronicle_check_deposit_zone's docstring for why),
