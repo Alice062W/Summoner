@@ -376,6 +376,40 @@ function armIcon(direction) {
   return `<span title="${direction}">${ARM_ICONS[direction]}</span>`;
 }
 
+// Groups loots by the SAME icon lootRowIcon() would render (a group can
+// span several distinct keys, e.g. every gem tier under 💎 — see
+// LOOT_GROUPS), then renders each group once as "icon" (single pick) or
+// "icon×N" (N picks) instead of repeating the icon N times, per user
+// request 2026-09-07 (run-feed rows only — the expanded per-run detail via
+// lootItemHtml still lists every individual pick with its own score).
+function lootCellHtml(loots) {
+  if (!loots || loots.length === 0) return "-";
+  const buckets = new Map(); // groupName -> {icon, count, labels: Set}
+  for (const l of loots) {
+    let groupName, icon;
+    if (l.is_key) {
+      groupName = "Key"; icon = "🔑";
+    } else {
+      const key = l.key || l.label;
+      if (key === "loot_gold") {
+        groupName = "Gold"; icon = "💰";
+      } else {
+        const found = LOOT_GROUPS.find(([, keys]) => keys.includes(key));
+        if (found) { groupName = found[0]; icon = LOOT_ICONS[found[0]]; }
+        else { groupName = l.label || "Item"; icon = "📦"; }
+      }
+    }
+    if (!buckets.has(groupName)) buckets.set(groupName, { icon, count: 0, labels: new Set() });
+    const b = buckets.get(groupName);
+    b.count += 1;
+    if (l.label) b.labels.add(l.label);
+  }
+  return [...buckets.values()].map(b => {
+    const title = [...b.labels].join(", ") || b.icon;
+    return b.count > 1 ? `<span title="${title}">${b.icon}×${b.count}</span>` : `<span title="${title}">${b.icon}</span>`;
+  }).join(" ");
+}
+
 function lootRowIcon(l) {
   if (l.is_key) return `<span title="${l.label}">🔑</span>`;
   const key = l.key || l.label;
@@ -1390,7 +1424,7 @@ function renderRunFeed(tbodyId, runs, idPrefix) {
   );
   tbody.innerHTML = "";
   runs.forEach(r => {
-    const loot = (r.loots || []).map(l => lootRowIcon(l)).join(" ") || "-";
+    const loot = lootCellHtml(r.loots);
     const detailId = `${idPrefix}${r.id}`;
     const isPortalFail = r.result === "portal_fail";
 
@@ -1611,7 +1645,7 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
   );
   tbody.innerHTML = "";
   runs.forEach(r => {
-    const loot = (r.loots || []).map(l => lootRowIcon(l)).join(" ") || "-";
+    const loot = lootCellHtml(r.loots);
     const detailId = `${idPrefix}${r.id}`;
     const isWpFail = r.result === "wp_fail";
     const isStashRestart = r.result === "stash_restart";
