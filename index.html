@@ -142,6 +142,12 @@
       <div class="key-count-box hate"><span id="keyHateBadge" class="rune-collected-badge" style="display:none;"></span><p>🔥 Hate</p><p id="keyHate">-</p></div>
       <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
     </div>
+    <p style="margin:10px 0 0; font-size:12px; color:#5f5e5a;">Alt account (manual only)</p>
+    <div class="key-counts-grid">
+      <div class="key-count-box"><p>👹 Terror</p><p id="altKeyTerror">-</p></div>
+      <div class="key-count-box"><p>🔥 Hate</p><p id="altKeyHate">-</p></div>
+      <div class="key-count-box"><p>💀 Destruction</p><p id="altKeyDestruction">-</p></div>
+    </div>
   </div>
 
   <div id="runeStatsPanel" class="panel" style="display:none;">
@@ -516,6 +522,24 @@ async function refreshKeyCounts() {
   renderKeyCounts(await loadKeyCounts());
 }
 
+// Same idea as key_counts above, but for a second, separate account the
+// user tracks manually — nothing here is ever bot-written.
+async function loadAltKeyCounts() {
+  const { data, error } = await sb.from("alt_account_key_counts").select("*").eq("id", 1).limit(1);
+  if (error || !data || data.length === 0) return { terror: 0, hate: 0, destruction: 0 };
+  return data[0];
+}
+
+function renderAltKeyCounts(counts) {
+  document.getElementById("altKeyTerror").textContent = counts.terror;
+  document.getElementById("altKeyHate").textContent = counts.hate;
+  document.getElementById("altKeyDestruction").textContent = counts.destruction;
+}
+
+async function refreshAltKeyCounts() {
+  renderAltKeyCounts(await loadAltKeyCounts());
+}
+
 // History tab — data-driven, sums is_key loot items across every run in
 // every trial via the total_keys_collected() Postgres function (supabase/
 // migrations/0013_summoner_total_keys_collected.sql), computed server-side
@@ -679,6 +703,40 @@ async function editKeyCounts() {
     return;
   }
   renderKeyCounts(data[0]);
+
+  const editAlt = confirm("Also edit the alt account key counts?");
+  if (!editAlt) return;
+  const altCurrent = await loadAltKeyCounts();
+  const altTerrorStr = prompt("Alt account — Key of Terror count:", altCurrent.terror);
+  if (altTerrorStr === null) return;
+  const altHateStr = prompt("Alt account — Key of Hate count:", altCurrent.hate);
+  if (altHateStr === null) return;
+  const altDestructionStr = prompt("Alt account — Key of Destruction count:", altCurrent.destruction);
+  if (altDestructionStr === null) return;
+  const altTerror = parseInt(altTerrorStr, 10);
+  const altHate = parseInt(altHateStr, 10);
+  const altDestruction = parseInt(altDestructionStr, 10);
+  if ([altTerror, altHate, altDestruction].some(n => !Number.isInteger(n) || n < 0)) {
+    alert("All three alt-account values must be whole numbers ≥ 0 — alt account unchanged.");
+    return;
+  }
+  const { data: altData, error: altError } = await sb.from("alt_account_key_counts")
+    .update({ terror: altTerror, hate: altHate, destruction: altDestruction, updated_at: new Date().toISOString() })
+    .eq("id", 1)
+    .select();
+  if (altError) {
+    alert(`Alt account update failed: ${altError.message}`);
+    return;
+  }
+  if (!altData || altData.length === 0) {
+    alert(
+      "Alt account update request succeeded but changed 0 rows — this usually means the " +
+      "alt_account_key_counts update policy hasn't been added yet " +
+      "(see supabase/migrations/0025_alt_account_key_counts.sql) — nothing was changed."
+    );
+    return;
+  }
+  renderAltKeyCounts(altData[0]);
 }
 
 document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
@@ -1876,6 +1934,7 @@ refreshLive();
 refreshHistory();
 populateTrialPicker();
 refreshKeyCounts();
+refreshAltKeyCounts();
 refreshRuneInventory();
 
 // Realtime pushes are best-effort: a tab open before a trial starts, a
@@ -1895,6 +1954,7 @@ refreshRuneInventory();
 setInterval(() => {
   refreshLive();
   refreshKeyCounts();
+  refreshAltKeyCounts();
   refreshRuneInventory();
 }, 15000);
 </script>
