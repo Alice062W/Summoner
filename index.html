@@ -142,7 +142,10 @@
       <div class="key-count-box hate"><span id="keyHateBadge" class="rune-collected-badge" style="display:none;"></span><p>🔥 Hate</p><p id="keyHate">-</p></div>
       <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
     </div>
-    <p style="margin:10px 0 0; font-size:12px; color:#5f5e5a;">Alt account (manual only)</p>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px;">
+      <p style="margin:0; font-size:12px; color:#5f5e5a;">Alt account (manual only)</p>
+      <button id="editAltKeysBtn" style="cursor:pointer; border:1px solid #4a3a24; background:#221a12; color:#c9a227; padding:4px 10px; border-radius:6px; font-size:13px;">✏️ Edit</button>
+    </div>
     <div class="key-counts-grid">
       <div class="key-count-box"><p>👹 Terror</p><p id="altKeyTerror">-</p></div>
       <div class="key-count-box"><p>🔥 Hate</p><p id="altKeyHate">-</p></div>
@@ -703,43 +706,51 @@ async function editKeyCounts() {
     return;
   }
   renderKeyCounts(data[0]);
+}
 
-  const editAlt = confirm("Also edit the alt account key counts?");
-  if (!editAlt) return;
-  const altCurrent = await loadAltKeyCounts();
-  const altTerrorStr = prompt("Alt account — Key of Terror count:", altCurrent.terror);
-  if (altTerrorStr === null) return;
-  const altHateStr = prompt("Alt account — Key of Hate count:", altCurrent.hate);
-  if (altHateStr === null) return;
-  const altDestructionStr = prompt("Alt account — Key of Destruction count:", altCurrent.destruction);
-  if (altDestructionStr === null) return;
-  const altTerror = parseInt(altTerrorStr, 10);
-  const altHate = parseInt(altHateStr, 10);
-  const altDestruction = parseInt(altDestructionStr, 10);
-  if ([altTerror, altHate, altDestruction].some(n => !Number.isInteger(n) || n < 0)) {
-    alert("All three alt-account values must be whole numbers ≥ 0 — alt account unchanged.");
+document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
+
+async function editAltKeyCounts() {
+  const entered = prompt("Enter passphrase to edit alt account key counts:");
+  if (entered === null) return;
+  if (entered !== DELETE_PASSPHRASE) {
+    alert("Incorrect passphrase — nothing changed.");
     return;
   }
-  const { data: altData, error: altError } = await sb.from("alt_account_key_counts")
-    .update({ terror: altTerror, hate: altHate, destruction: altDestruction, updated_at: new Date().toISOString() })
+  const current = await loadAltKeyCounts();
+  const terrorStr = prompt("Alt account — Key of Terror count:", current.terror);
+  if (terrorStr === null) return;
+  const hateStr = prompt("Alt account — Key of Hate count:", current.hate);
+  if (hateStr === null) return;
+  const destructionStr = prompt("Alt account — Key of Destruction count:", current.destruction);
+  if (destructionStr === null) return;
+  const terror = parseInt(terrorStr, 10);
+  const hate = parseInt(hateStr, 10);
+  const destruction = parseInt(destructionStr, 10);
+  if ([terror, hate, destruction].some(n => !Number.isInteger(n) || n < 0)) {
+    alert("All three values must be whole numbers ≥ 0 — nothing changed.");
+    return;
+  }
+  const { data, error } = await sb.from("alt_account_key_counts")
+    .update({ terror, hate, destruction, updated_at: new Date().toISOString() })
     .eq("id", 1)
     .select();
-  if (altError) {
-    alert(`Alt account update failed: ${altError.message}`);
+  if (error) {
+    alert(`Update failed: ${error.message}`);
     return;
   }
-  if (!altData || altData.length === 0) {
+  if (!data || data.length === 0) {
     alert(
-      "Alt account update request succeeded but changed 0 rows — this usually means the " +
+      "Update request succeeded but changed 0 rows — this usually means the " +
       "alt_account_key_counts update policy hasn't been added yet " +
       "(see supabase/migrations/0025_alt_account_key_counts.sql) — nothing was changed."
     );
     return;
   }
-  renderAltKeyCounts(altData[0]);
+  renderAltKeyCounts(data[0]);
 }
 
-document.getElementById("editKeysBtn").addEventListener("click", editKeyCounts);
+document.getElementById("editAltKeysBtn").addEventListener("click", editAltKeyCounts);
 
 async function loadTrialCount() {
   // Previously an unconditional count-everything with no date filter at
