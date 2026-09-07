@@ -143,10 +143,10 @@
       <div class="key-count-box"><p>💀 Destruction</p><p id="keyDestruction">-</p></div>
     </div>
     <details id="altKeysDetails" style="margin-top:10px;">
-      <summary style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-        <span style="font-size:12px; color:#5f5e5a;">Alt account (manual only)</span>
+      <summary style="cursor:pointer; font-size:12px; color:#5f5e5a;">Alt account (manual only)</summary>
+      <div style="display:flex; align-items:center; justify-content:flex-end; margin-top:8px;">
         <button id="editAltKeysBtn" style="cursor:pointer; border:1px solid #4a3a24; background:#221a12; color:#c9a227; padding:4px 10px; border-radius:6px; font-size:13px;">✏️ Edit</button>
-      </summary>
+      </div>
       <div class="key-counts-grid" style="margin-top:8px;">
         <div class="key-count-box"><p>👹 Terror</p><p id="altKeyTerror">-</p></div>
         <div class="key-count-box"><p>🔥 Hate</p><p id="altKeyHate">-</p></div>
@@ -752,14 +752,7 @@ async function editAltKeyCounts() {
   renderAltKeyCounts(data[0]);
 }
 
-document.getElementById("editAltKeysBtn").addEventListener("click", (e) => {
-  // The button lives inside the <summary> row so the collapsible section's
-  // label stays clickable to expand/collapse — without this, clicking Edit
-  // would also toggle the <details> open/closed underneath the dialogs.
-  e.preventDefault();
-  e.stopPropagation();
-  editAltKeyCounts();
-});
+document.getElementById("editAltKeysBtn").addEventListener("click", editAltKeyCounts);
 
 async function loadTrialCount() {
   // Previously an unconditional count-everything with no date filter at
