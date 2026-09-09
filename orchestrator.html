@@ -186,7 +186,14 @@ function fmtDurSeconds(totalSec) {
 
 function statsRowHtml(farming, betting) {
   const totalGold = farming.reduce((s, t) => s + (t.gold_collected || 0), 0);
+  // Total session time — every trial's own duration summed across BOTH
+  // phases (a still-running trial counts up to "now", same convention as
+  // trialDurationSec's other callers), since farming and betting trials
+  // run sequentially, not concurrently, within one orchestrator session.
+  // Per user request 2026-09-09, shown before the Farming section.
+  const totalSessionSec = [...farming, ...betting].reduce((s, t) => s + trialDurationSec(t), 0);
   return `<div class="stat-row">
+    <div class="stat-box"><div class="stat-label">Total Time Spent (session)</div><div class="stat-value">${fmtDurSeconds(totalSessionSec)}</div></div>
     <div class="stat-box"><div class="stat-label">Farming Trials</div><div class="stat-value">${farming.length}</div></div>
     <div class="stat-box"><div class="stat-label">Gold Collected (farming)</div><div class="stat-value">${totalGold.toLocaleString()}</div></div>
     <div class="stat-box"><div class="stat-label">Betting Trials</div><div class="stat-value">${betting.length}</div></div>
@@ -208,6 +215,13 @@ function farmingStatsHtml(farming, runs) {
   // _chronicle_check_deposit_zone's docstring for why), per user request
   // 2026-09-04.
   const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
+  // Same "🧟 revivals · 🧺❌ stash fails" stat shown on the Warlock History
+  // page (dashboard/index.html) — merc_revivals is a per-trial cumulative
+  // counter on warlock_trials, summed across this session's farming trials;
+  // stash fails counted from the already-fetched per-run rows, per user
+  // request 2026-09-09.
+  const mercRevivals = farming.reduce((s, t) => s + (t.merc_revivals || 0), 0);
+  const stashFails = runs.filter(r => r.stash_result === "fail").length;
   const lootCounts = {};
   for (const r of runs) {
     for (const l of (r.loots || [])) {
@@ -230,6 +244,7 @@ function farmingStatsHtml(farming, runs) {
       <div class="stat-box"><div class="stat-label">🪙 Gold / Hour</div><div class="stat-value">${goldPerHour.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">⚡ Runs / Hour</div><div class="stat-value">${runsPerHour.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">📜 Runs w/ Chronicle Kept</div><div class="stat-value">${chronicleKeptRuns}</div></div>
+      <div class="stat-box"><div class="stat-label">Merc rev. / Stash fails</div><div class="stat-value">🧟 ${mercRevivals} · 🧺❌ ${stashFails}</div></div>
     </div>
     <div class="loot-tally">${chips || '<span class="empty-state" style="padding:4px 0;">No loot yet.</span>'}</div>`;
 }
