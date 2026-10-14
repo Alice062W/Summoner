@@ -203,7 +203,25 @@ function statsRowHtml(farming, betting) {
 // "Also keep valuable unique/set items" (2026-10-13) — see the same helpers
 // in dashboard/index.html. valuable_kept is NULL when the bot's checkbox was
 // off for a run, [] when on but nothing found, else the distinct item labels.
+// Template labels renamed 2026-10-14 once myD2R gave the real item names (the
+// first pass mislabeled e.g. 聖堂騎士戰甲 as "Sacred Armor / Tyrael's Might"; it is
+// the Templar Coat / Guardian Angel). Runs saved before the rebuilt exes
+// shipped still carry the old labels, so translate them here.
+const VALUABLE_LABEL_ALIASES = {
+  "Unique_Death_Mask__Blackhorns_Face": "Unique_Death_Mask__Blackhorns_Face_and_Hellwardens_Will",
+  "Unique_Sacred_Armor__Tyraels_Might": "Unique_Templar_Coat__Guardian_Angel",
+  "Unique_Troll_Belt": "Unique_Troll_Belt__Gheeds_Wager",
+  "Unique_Sky_Spirit": "Unique_Sky_Spirit__Ravenlore",
+  "Unique_Grim_Scythe": "Unique_Thresher__The_Reapers_Toll",
+  "Unique_Mirrored_Boots": "Unique_Mirrored_Boots__Wraithstep",
+  "Unique_Burnt_Text_Grimoire": "Unique_Burnt_Text__Measured_Wrath",
+  "Unique_Occult_Codex_Grimoire": "Unique_Occult_Tome__Ars_Dul-Mephistos",
+  "Unique_Blasphemous_Grimoire": "Unique_Blasphemous_Grimoire__Ars_Al-Diabolos",
+  "Set_Mirrored_Boots": "Set_Mirrored_Boots__Horazons_Legacy",
+};
+const canonValuable = (l) => VALUABLE_LABEL_ALIASES[l] || l;
 function valuableLabel(stem) {
+  stem = canonValuable(stem);
   let quality = "", rest = stem;
   const m = /^(Unique|Set)_(.*)$/.exec(stem);
   if (m) { quality = m[1]; rest = m[2]; }
@@ -229,7 +247,7 @@ function farmingStatsHtml(farming, runs) {
   // 2026-09-04.
   const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
   // Valuable-item keep: always shown (0 when the checkbox was off).
-  const valuableKeptList = (r) => Array.isArray(r.valuable_kept) ? r.valuable_kept : [];
+  const valuableKeptList = (r) => Array.isArray(r.valuable_kept) ? r.valuable_kept.map(canonValuable) : [];
   const valuableRuns = runs.filter(r => valuableKeptList(r).length > 0).length;
   const valuableCounts = {};
   for (const r of runs) for (const l of valuableKeptList(r)) valuableCounts[l] = (valuableCounts[l] || 0) + 1;

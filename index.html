@@ -459,7 +459,25 @@ function lootCellHtml(loots) {
 // (0 when the feature was off); only the per-run ⭐ icon/detail depend on
 // there being something kept. valuableLabel() must stay in step with
 // gui_app.py's _pretty_valuable().
+// Template labels renamed 2026-10-14 once myD2R gave the real item names (the
+// first pass mislabeled e.g. 聖堂騎士戰甲 as "Sacred Armor / Tyrael's Might"; it is
+// the Templar Coat / Guardian Angel). Runs saved before the rebuilt exes
+// shipped still carry the old labels, so translate them here.
+const VALUABLE_LABEL_ALIASES = {
+  "Unique_Death_Mask__Blackhorns_Face": "Unique_Death_Mask__Blackhorns_Face_and_Hellwardens_Will",
+  "Unique_Sacred_Armor__Tyraels_Might": "Unique_Templar_Coat__Guardian_Angel",
+  "Unique_Troll_Belt": "Unique_Troll_Belt__Gheeds_Wager",
+  "Unique_Sky_Spirit": "Unique_Sky_Spirit__Ravenlore",
+  "Unique_Grim_Scythe": "Unique_Thresher__The_Reapers_Toll",
+  "Unique_Mirrored_Boots": "Unique_Mirrored_Boots__Wraithstep",
+  "Unique_Burnt_Text_Grimoire": "Unique_Burnt_Text__Measured_Wrath",
+  "Unique_Occult_Codex_Grimoire": "Unique_Occult_Tome__Ars_Dul-Mephistos",
+  "Unique_Blasphemous_Grimoire": "Unique_Blasphemous_Grimoire__Ars_Al-Diabolos",
+  "Set_Mirrored_Boots": "Set_Mirrored_Boots__Horazons_Legacy",
+};
+const canonValuable = (l) => VALUABLE_LABEL_ALIASES[l] || l;
 function valuableLabel(stem) {
+  stem = canonValuable(stem);
   let quality = "", rest = stem;
   const m = /^(Unique|Set)_(.*)$/.exec(stem);
   if (m) { quality = m[1]; rest = m[2]; }
@@ -468,7 +486,7 @@ function valuableLabel(stem) {
   const dot = quality === "Unique" ? "🟡 " : quality === "Set" ? "🟢 " : "";
   return item ? `${dot}${item.replace(/_/g, " ")} (${b})` : `${dot}${b}`;
 }
-function valuableKeptList(run) { return Array.isArray(run.valuable_kept) ? run.valuable_kept : []; }
+function valuableKeptList(run) { return Array.isArray(run.valuable_kept) ? run.valuable_kept.map(canonValuable) : []; }
 function valuableRunCount(runs) { return runs.filter(r => valuableKeptList(r).length > 0).length; }
 function valuableCounts(runs) {
   const c = {};
