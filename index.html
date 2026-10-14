@@ -414,10 +414,10 @@ function lootCellHtml(loots) {
 // "Also keep valuable unique/set items" feature (2026-10-13). warlock_runs.
 // valuable_kept is NULL when the bot's checkbox was off for that run, [] when
 // on but nothing valuable was found, or the distinct template labels kept
-// (e.g. "Unique_Demonhead__Andariels_Visage"). Everything valuable-related
-// on this page only renders when at least one run in scope is non-NULL, so
-// it stays invisible for anyone not using the feature. valuableLabel() must
-// stay in step with gui_app.py's _pretty_valuable().
+// (e.g. "Unique_Demonhead__Andariels_Visage"). The stats are always shown
+// (0 when the feature was off); only the per-run ⭐ icon/detail depend on
+// there being something kept. valuableLabel() must stay in step with
+// gui_app.py's _pretty_valuable().
 function valuableLabel(stem) {
   let quality = "", rest = stem;
   const m = /^(Unique|Set)_(.*)$/.exec(stem);
@@ -428,7 +428,6 @@ function valuableLabel(stem) {
   return item ? `${dot}${item.replace(/_/g, " ")} (${b})` : `${dot}${b}`;
 }
 function valuableKeptList(run) { return Array.isArray(run.valuable_kept) ? run.valuable_kept : []; }
-function valuableFeatureUsed(runs) { return runs.some(r => r.valuable_kept != null); }
 function valuableRunCount(runs) { return runs.filter(r => valuableKeptList(r).length > 0).length; }
 function valuableCounts(runs) {
   const c = {};
@@ -480,7 +479,7 @@ function initBotUI() {
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("statChronicleCard").style.display = isWarlock ? "" : "none";
   document.getElementById("statTotalTimeCard").style.display = isWarlock ? "" : "none";
-  document.getElementById("statValuableCard").style.display = "none";   // renderStats() reveals it for Warlock once there's data
+  document.getElementById("statValuableCard").style.display = isWarlock ? "" : "none";
   document.getElementById("lootCountChartPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("lootDurationChartPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
@@ -876,19 +875,15 @@ function renderStats(runStats, trialCount, runs = []) {
     // time soon).
     document.getElementById("statChronicleKept").textContent =
       runs.filter(r => r.chronicle_kept).length;
-    // Valuable-item keep: shown only if any run in the selected period had
-    // the checkbox on; hover for the per-item breakdown.
+    // Valuable-item keep: always shown for Warlock — 0 when the bot's
+    // checkbox was off (runs then carry valuable_kept = NULL). Hover for
+    // the per-item breakdown.
     const vCard = document.getElementById("statValuableCard");
-    if (valuableFeatureUsed(runs)) {
-      vCard.style.display = "";
-      document.getElementById("statValuableKept").textContent = valuableRunCount(runs);
-      const vc = valuableCounts(runs);
-      vCard.title = Object.keys(vc).length
-        ? Object.entries(vc).sort((a, b) => b[1] - a[1]).map(([l, n]) => `${valuableLabel(l)} — ${n} run(s)`).join("\n")
-        : "No valuable items kept in this period";
-    } else {
-      vCard.style.display = "none";
-    }
+    document.getElementById("statValuableKept").textContent = valuableRunCount(runs);
+    const vc = valuableCounts(runs);
+    vCard.title = Object.keys(vc).length
+      ? Object.entries(vc).sort((a, b) => b[1] - a[1]).map(([l, n]) => `${valuableLabel(l)} — ${n} run(s)`).join("\n")
+      : "No valuable items kept in this period";
   } else {
     const keyRunCount = Number(runStats.key_run_count) || 0;
     document.getElementById("statRunsPerKey").textContent =
@@ -1608,8 +1603,7 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapse
   // _chronicle_check_deposit_zone's docstring for why), per user request
   // 2026-09-04.
   const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
-  // Valuable-item keep: only shown when the feature was on for any run here.
-  const valuableOn = valuableFeatureUsed(runs);
+  // Valuable-item keep: always shown (0 when the feature was off).
   const valuableRuns = valuableRunCount(runs);
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
@@ -1620,7 +1614,7 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapse
     `🪙 ${goldPerHour.toLocaleString()}/hr · ` +
     `⚡ ${runsPerHour.toLocaleString()}/hr · ` +
     `📜 ${chronicleKeptRuns}` +
-    (valuableOn ? ` · ⭐ ${valuableRuns}` : "") +
+    ` · ⭐ ${valuableRuns}` +
     (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
 }
 

@@ -228,8 +228,7 @@ function farmingStatsHtml(farming, runs) {
   // _chronicle_check_deposit_zone's docstring for why), per user request
   // 2026-09-04.
   const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
-  // Valuable-item keep: shown only when any run this session had the checkbox on.
-  const valuableOn = runs.some(r => r.valuable_kept != null);
+  // Valuable-item keep: always shown (0 when the checkbox was off).
   const valuableKeptList = (r) => Array.isArray(r.valuable_kept) ? r.valuable_kept : [];
   const valuableRuns = runs.filter(r => valuableKeptList(r).length > 0).length;
   const valuableCounts = {};
@@ -266,7 +265,7 @@ function farmingStatsHtml(farming, runs) {
       <div class="stat-box"><div class="stat-label">⚡ Runs / Hour</div><div class="stat-value">${runsPerHour.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">📜 Runs w/ Chronicle Kept</div><div class="stat-value">${chronicleKeptRuns}</div></div>
       <div class="stat-box"><div class="stat-label">Merc rev. / Stash fails</div><div class="stat-value">🧟 ${mercRevivals} · 🧺❌ ${stashFails}</div></div>
-      ${valuableOn ? `<div class="stat-box"><div class="stat-label">⭐ Runs w/ Valuable Kept</div><div class="stat-value">${valuableRuns}</div></div>` : ""}
+      <div class="stat-box"><div class="stat-label">⭐ Runs w/ Valuable Kept</div><div class="stat-value">${valuableRuns}</div></div>
     </div>
     ${valuableChips ? `<div class="loot-tally">${valuableChips}</div>` : ""}
     <div class="loot-tally">${chips || '<span class="empty-state" style="padding:4px 0;">No loot yet.</span>'}</div>`;
