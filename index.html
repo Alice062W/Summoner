@@ -44,6 +44,10 @@
   .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 13px; margin-top: 8px; }
   .legend-grid > div { display: flex; align-items: center; gap: 6px; }
   .legend-grid .status-dot { margin-right: 0; }
+  .valuable-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; }
+  .valuable-table th, .valuable-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #4a3a24; vertical-align: top; }
+  .valuable-table th { color: #a8916a; font-weight: 600; }
+  .valuable-table .unverified { color: #a8916a; font-style: italic; }
   details.panel summary { font-family: 'Cinzel', serif; cursor: pointer; }
   .key-counts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
   .key-count-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 10px; text-align: center; position: relative; }
@@ -128,7 +132,43 @@
     <div>🧟 Merc revived at the start of this run — one icon per attempt made (Summoner/Warlock)</div>
     <div>🔌 Connection-failed dialog auto-dismissed before this run (Summoner/Warlock)</div>
     <div>🧺❌ Stash not found — run restarted (Warlock)</div>
+    <div>🟡 Unique items (gold-label pickup)</div>
+    <div>🟢 Set items (green-label pickup)</div>
+    <div>📜 A NEW Chronicle (collection-log) item was kept this run (Warlock)</div>
+    <div>⭐ A valuable unique/set item was kept this run — needs the bot's "Also keep valuable unique/set items" checkbox (Warlock). Shows 0 when that checkbox is off.</div>
+    <div>🪙 Gold per hour · ⚡ Runs per hour · 💰 Gold per run (live stats, Warlock)</div>
   </div>
+
+  <details style="margin-top:12px;">
+    <summary><strong>⭐ Valuable items the bot keeps</strong> (templates for the "Also keep valuable unique/set items" checkbox)</summary>
+    <p style="margin:6px 0 0; font-size:12px; color:#a8916a;">
+      After the bag sweep, an item that is no longer new to the Chronicle is still kept when its tooltip's <em>base-type</em> line
+      matches one below — the base type is readable even before identification. 🟡 gold text = unique, 🟢 green text = set; a rare or
+      magic item with the same base name is not kept. A template matches <em>every</em> unique/set item of that base, so the item name
+      is what the base is known for, not a filter. Names marked <span class="unverified">not verified</span> are ones I could not confirm.
+    </p>
+    <div style="overflow-x:auto;">
+    <table class="valuable-table">
+      <thead><tr><th>Matched on tooltip (before ID)</th><th>中文 (in game)</th><th>Quality</th><th>Name after identification</th></tr></thead>
+      <tbody>
+        <tr><td>Death Mask</td><td>死亡面具</td><td>🟡 Unique</td><td>Blackhorn's Face</td></tr>
+        <tr><td>Demonhead</td><td>惡魔頭骨</td><td>🟡 Unique</td><td>Andariel's Visage</td></tr>
+        <tr><td>Sacred Armor</td><td>聖堂騎士戰甲</td><td>🟡 Unique</td><td>Tyrael's Might</td></tr>
+        <tr><td>Serpentskin Armor</td><td>海蛇皮甲</td><td>🟡 Unique</td><td>Skin of the Vipermagi</td></tr>
+        <tr><td>Spiderweb Sash</td><td>蛛網束帶</td><td>🟡 Unique</td><td>Arachnid Mesh</td></tr>
+        <tr><td>Mithril Coil</td><td>秘銀腰帶</td><td>🟡 Unique</td><td>Verdungo's Hearty Cord</td></tr>
+        <tr><td>Lacquered Plate</td><td>漆護鎧甲</td><td>🟢 Set</td><td>Tal Rasha's Guardianship</td></tr>
+        <tr><td>Burnt Text (Grimoire)</td><td>焦灼書冊</td><td>🟡 Unique</td><td>Measured Wrath</td></tr>
+        <tr><td>Blasphemous Grimoire</td><td>褻瀆魔典</td><td>🟡 Unique</td><td>Ars Al'Diablolos</td></tr>
+        <tr><td>Occult Codex (Grimoire)</td><td>神秘秘典</td><td>🟡 Unique</td><td class="unverified">not verified</td></tr>
+        <tr><td>Troll Belt</td><td>食人妖腰帶</td><td>🟡 Unique</td><td class="unverified">not verified — the classic Troll Belt item, Trang-Oul's Girth, is a <em>set</em> item (green)</td></tr>
+        <tr><td>Sky Spirit (Druid pelt)</td><td>天翔靈獸帽</td><td>🟡 Unique</td><td class="unverified">not verified (likely Ravenlore)</td></tr>
+        <tr><td>Grim Scythe</td><td>斬鐮</td><td>🟡 Unique</td><td class="unverified">not verified</td></tr>
+        <tr><td>Mirrored Boots</td><td>幻鏡戰靴</td><td>🟡 Unique and 🟢 Set (two templates)</td><td class="unverified">not verified</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </details>
 </div>
 
 <div id="liveTabPanel">
