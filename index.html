@@ -232,6 +232,7 @@
     <div class="card" id="statTotalTimeCard" style="display:none;"><p>Total Time Spent</p><p id="statTotalTime">-</p></div>
     <div class="card"><p id="statCard4Label">Avg runs / key</p><p id="statRunsPerKey">-</p></div>
     <div class="card" id="statChronicleCard" style="display:none;"><p>📜 Runs w/ Chronicle Kept</p><p id="statChronicleKept">-</p></div>
+    <div class="card" id="statValuableCard" style="display:none;"><p>⭐ Runs w/ Valuable Kept</p><p id="statValuableKept">-</p></div>
   </div>
 
   <details class="panel" id="lootLineChartPanel">
@@ -410,6 +411,31 @@ function lootCellHtml(loots) {
   }).join(" ");
 }
 
+// "Also keep valuable unique/set items" feature (2026-10-13). warlock_runs.
+// valuable_kept is NULL when the bot's checkbox was off for that run, [] when
+// on but nothing valuable was found, or the distinct template labels kept
+// (e.g. "Unique_Demonhead__Andariels_Visage"). Everything valuable-related
+// on this page only renders when at least one run in scope is non-NULL, so
+// it stays invisible for anyone not using the feature. valuableLabel() must
+// stay in step with gui_app.py's _pretty_valuable().
+function valuableLabel(stem) {
+  let quality = "", rest = stem;
+  const m = /^(Unique|Set)_(.*)$/.exec(stem);
+  if (m) { quality = m[1]; rest = m[2]; }
+  const [base, item] = rest.split("__");
+  const b = base.replace(/_/g, " ");
+  const dot = quality === "Unique" ? "🟡 " : quality === "Set" ? "🟢 " : "";
+  return item ? `${dot}${item.replace(/_/g, " ")} (${b})` : `${dot}${b}`;
+}
+function valuableKeptList(run) { return Array.isArray(run.valuable_kept) ? run.valuable_kept : []; }
+function valuableFeatureUsed(runs) { return runs.some(r => r.valuable_kept != null); }
+function valuableRunCount(runs) { return runs.filter(r => valuableKeptList(r).length > 0).length; }
+function valuableCounts(runs) {
+  const c = {};
+  for (const r of runs) for (const l of valuableKeptList(r)) c[l] = (c[l] || 0) + 1;
+  return c;
+}
+
 function lootRowIcon(l) {
   if (l.is_key) return `<span title="${l.label}">🔑</span>`;
   const key = l.key || l.label;
@@ -454,6 +480,7 @@ function initBotUI() {
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("statChronicleCard").style.display = isWarlock ? "" : "none";
   document.getElementById("statTotalTimeCard").style.display = isWarlock ? "" : "none";
+  document.getElementById("statValuableCard").style.display = "none";   // renderStats() reveals it for Warlock once there's data
   document.getElementById("lootCountChartPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("lootDurationChartPanel").style.display = isWarlock ? "" : "none";
   const liveHead = isWarlock
@@ -849,6 +876,19 @@ function renderStats(runStats, trialCount, runs = []) {
     // time soon).
     document.getElementById("statChronicleKept").textContent =
       runs.filter(r => r.chronicle_kept).length;
+    // Valuable-item keep: shown only if any run in the selected period had
+    // the checkbox on; hover for the per-item breakdown.
+    const vCard = document.getElementById("statValuableCard");
+    if (valuableFeatureUsed(runs)) {
+      vCard.style.display = "";
+      document.getElementById("statValuableKept").textContent = valuableRunCount(runs);
+      const vc = valuableCounts(runs);
+      vCard.title = Object.keys(vc).length
+        ? Object.entries(vc).sort((a, b) => b[1] - a[1]).map(([l, n]) => `${valuableLabel(l)} — ${n} run(s)`).join("\n")
+        : "No valuable items kept in this period";
+    } else {
+      vCard.style.display = "none";
+    }
   } else {
     const keyRunCount = Number(runStats.key_run_count) || 0;
     document.getElementById("statRunsPerKey").textContent =
@@ -1568,6 +1608,9 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapse
   // _chronicle_check_deposit_zone's docstring for why), per user request
   // 2026-09-04.
   const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
+  // Valuable-item keep: only shown when the feature was on for any run here.
+  const valuableOn = valuableFeatureUsed(runs);
+  const valuableRuns = valuableRunCount(runs);
   document.getElementById(elId).textContent = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `🌀 ${wpFail}/${total} (${pct(wpFail, total)}%) · ` +
@@ -1577,6 +1620,7 @@ function renderWarlockRatioStats(elId, runs, mercRevivals, goldCollected, elapse
     `🪙 ${goldPerHour.toLocaleString()}/hr · ` +
     `⚡ ${runsPerHour.toLocaleString()}/hr · ` +
     `📜 ${chronicleKeptRuns}` +
+    (valuableOn ? ` · ⭐ ${valuableRuns}` : "") +
     (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
 }
 
@@ -1617,12 +1661,17 @@ function renderWarlockDetailHtml(run) {
   const chronicleHtml = run.chronicle_kept
     ? `<div style="margin-top:4px;"><strong>📜 Chronicle:</strong> New item kept this run</div>`
     : "";
+  const vList = valuableKeptList(run);
+  const valuableHtml = vList.length
+    ? `<div style="margin-top:4px;"><strong>⭐ Valuable kept:</strong> ${vList.map(valuableLabel).join(", ")}</div>`
+    : "";
   return `
     <div><strong>Started:</strong> ${startedLabel}</div>
     <div style="margin-top:4px;"><strong>Stash:</strong> ${stashLabel}</div>
     <div style="margin-top:4px;"><strong>Time used:</strong> ${durationLabel}</div>
     <div style="margin-top:4px;"><strong>Connection failed (確定 clicked):</strong> ${run.connection_failed_count ?? 0}</div>
     ${chronicleHtml}
+    ${valuableHtml}
     ${renderScanListHtml(run.stash_scans, "Stash")}
     ${renderScanListHtml(run.wp_scans, "WP")}
     <div style="margin-top:8px;">
@@ -1669,12 +1718,17 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
     const chronicleIcon = r.chronicle_kept
       ? `<span title="kept a new Chronicle item this run">📜</span> `
       : "";
+    // Valuable-item keep — same prestep-icon treatment; tooltip lists what.
+    const vKept = valuableKeptList(r);
+    const valuableIcon = vKept.length
+      ? `<span title="kept valuable item(s): ${vKept.map(valuableLabel).join(", ")}">⭐</span> `
+      : "";
 
     if (isWpFail) {
       summaryRow.innerHTML =
         `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
         `<td data-label="run">#${r.run_num}</td>` +
-        `<td data-label="status" style="color:#888780;" title="WP not found">${revivedIcon}${connFailedIcon}${chronicleIcon}🌀</td>` +
+        `<td data-label="status" style="color:#888780;" title="WP not found">${revivedIcon}${connFailedIcon}${chronicleIcon}${valuableIcon}🌀</td>` +
         `<td data-label="loot">-</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     } else {
       const statusIcon = isStashRestart
@@ -1682,7 +1736,7 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
         : `<span title="success">✅</span>`;
       summaryRow.innerHTML =
         `<td data-label=""><button class="expand-btn" onclick="toggleDetail('${detailId}')">▾</button></td>` +
-        `<td data-label="run">#${r.run_num}</td><td data-label="status">${revivedIcon}${connFailedIcon}${chronicleIcon}${statusIcon}</td>` +
+        `<td data-label="run">#${r.run_num}</td><td data-label="status">${revivedIcon}${connFailedIcon}${chronicleIcon}${valuableIcon}${statusIcon}</td>` +
         `<td data-label="loot">${loot}</td><td data-label="when">${timeAgo(r.ended_at)}</td>`;
     }
     tbody.appendChild(summaryRow);

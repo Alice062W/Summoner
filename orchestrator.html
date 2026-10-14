@@ -200,6 +200,19 @@ function statsRowHtml(farming, betting) {
   </div>`;
 }
 
+// "Also keep valuable unique/set items" (2026-10-13) — see the same helpers
+// in dashboard/index.html. valuable_kept is NULL when the bot's checkbox was
+// off for a run, [] when on but nothing found, else the distinct item labels.
+function valuableLabel(stem) {
+  let quality = "", rest = stem;
+  const m = /^(Unique|Set)_(.*)$/.exec(stem);
+  if (m) { quality = m[1]; rest = m[2]; }
+  const [base, item] = rest.split("__");
+  const b = base.replace(/_/g, " ");
+  const dot = quality === "Unique" ? "🟡 " : quality === "Set" ? "🟢 " : "";
+  return item ? `${dot}${item.replace(/_/g, " ")} (${b})` : `${dot}${b}`;
+}
+
 function farmingStatsHtml(farming, runs) {
   const totalRuns = runs.length;
   const totalGold = farming.reduce((s, t) => s + (t.gold_collected || 0), 0);
@@ -215,6 +228,14 @@ function farmingStatsHtml(farming, runs) {
   // _chronicle_check_deposit_zone's docstring for why), per user request
   // 2026-09-04.
   const chronicleKeptRuns = runs.filter(r => r.chronicle_kept).length;
+  // Valuable-item keep: shown only when any run this session had the checkbox on.
+  const valuableOn = runs.some(r => r.valuable_kept != null);
+  const valuableKeptList = (r) => Array.isArray(r.valuable_kept) ? r.valuable_kept : [];
+  const valuableRuns = runs.filter(r => valuableKeptList(r).length > 0).length;
+  const valuableCounts = {};
+  for (const r of runs) for (const l of valuableKeptList(r)) valuableCounts[l] = (valuableCounts[l] || 0) + 1;
+  const valuableChips = Object.entries(valuableCounts).sort((a, b) => b[1] - a[1])
+    .map(([l, n]) => `<span class="loot-chip">⭐ ${valuableLabel(l)}: ${n} run(s)</span>`).join("");
   // Same "🧟 revivals · 🧺❌ stash fails" stat shown on the Warlock History
   // page (dashboard/index.html) — merc_revivals is a per-trial cumulative
   // counter on warlock_trials, summed across this session's farming trials;
@@ -245,7 +266,9 @@ function farmingStatsHtml(farming, runs) {
       <div class="stat-box"><div class="stat-label">⚡ Runs / Hour</div><div class="stat-value">${runsPerHour.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">📜 Runs w/ Chronicle Kept</div><div class="stat-value">${chronicleKeptRuns}</div></div>
       <div class="stat-box"><div class="stat-label">Merc rev. / Stash fails</div><div class="stat-value">🧟 ${mercRevivals} · 🧺❌ ${stashFails}</div></div>
+      ${valuableOn ? `<div class="stat-box"><div class="stat-label">⭐ Runs w/ Valuable Kept</div><div class="stat-value">${valuableRuns}</div></div>` : ""}
     </div>
+    ${valuableChips ? `<div class="loot-tally">${valuableChips}</div>` : ""}
     <div class="loot-tally">${chips || '<span class="empty-state" style="padding:4px 0;">No loot yet.</span>'}</div>`;
 }
 
