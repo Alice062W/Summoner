@@ -272,6 +272,8 @@
     <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
     <div class="card" id="statTotalTimeCard" style="display:none;"><p>Total Time Spent</p><p id="statTotalTime">-</p></div>
     <div class="card"><p id="statCard4Label">Avg runs / key</p><p id="statRunsPerKey">-</p></div>
+    <div class="card" id="statRunsPerHourCard"><p>Runs / hour</p><p id="statRunsPerHour">-</p></div>
+    <div class="card" id="statKeysPerHourCard"><p>Keys / hour</p><p id="statKeysPerHour">-</p></div>
     <div class="card" id="statChronicleCard" style="display:none;"><p>📜 Runs w/ Chronicle Kept</p><p id="statChronicleKept">-</p></div>
     <div class="card" id="statValuableCard" style="display:none;"><p>⭐ Runs w/ Valuable Kept</p><p id="statValuableKept">-</p></div>
   </div>
@@ -538,6 +540,8 @@ function initBotUI() {
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("statChronicleCard").style.display = isWarlock ? "" : "none";
   document.getElementById("statTotalTimeCard").style.display = isWarlock ? "" : "none";
+  document.getElementById("statRunsPerHourCard").style.display = isWarlock ? "none" : "";
+  document.getElementById("statKeysPerHourCard").style.display = isWarlock ? "none" : "";
   document.getElementById("statValuableCard").style.display = isWarlock ? "" : "none";
   document.getElementById("lootCountChartPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("lootDurationChartPanel").style.display = isWarlock ? "" : "none";
@@ -947,6 +951,16 @@ function renderStats(runStats, trialCount, runs = []) {
     const keyRunCount = Number(runStats.key_run_count) || 0;
     document.getElementById("statRunsPerKey").textContent =
       keyRunCount > 0 ? (runCount / keyRunCount).toFixed(1) : "-";
+    // Rates over total farming time in the selected period (avg duration *
+    // run count = exact sum of run durations, same derivation as Warlock's
+    // Total Time Spent). Keys/hr uses key_run_count (runs that dropped a
+    // key; a run virtually never drops more than one) since it's the exact
+    // server-side figure -- unaffected by loadRuns()'s 1000-row cap.
+    const farmHours = ((Number(runStats.avg_duration_seconds) || 0) * runCount) / 3600;
+    document.getElementById("statRunsPerHour").textContent =
+      farmHours > 0 ? (runCount / farmHours).toFixed(1) : "-";
+    document.getElementById("statKeysPerHour").textContent =
+      farmHours > 0 ? (keyRunCount / farmHours).toFixed(2) : "-";
   }
 }
 
@@ -1598,6 +1612,13 @@ function renderTrialSummary(elId, runs, maxRuns, trial = null) {
     const endTime = trial.ended_at ? new Date(trial.ended_at) : new Date();
     const totalSec = (endTime - new Date(trial.started_at)) / 1000;
     text += ` — total ${fmtSeconds(totalSec)}`;
+    // Summoner-only overall rates over the trial's elapsed wall-clock time
+    // (climbs live while running). Keys = is_key loot items picked up.
+    if (currentBot !== "warlock" && totalSec > 0) {
+      const hrs = totalSec / 3600;
+      const keys = runs.reduce((s, r) => s + (r.loots || []).filter(l => l.is_key).length, 0);
+      text += ` — ${(runs.length / hrs).toFixed(1)} runs/hr — ${(keys / hrs).toFixed(2)} keys/hr`;
+    }
   }
   document.getElementById(elId).textContent = text;
 }
