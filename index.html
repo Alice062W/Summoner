@@ -250,8 +250,8 @@
   </div>
 
   <div id="historyKeyCountsPanel" class="panel">
-    <strong>🗝️ Keys Collected (all trials)</strong>
-    <p style="margin:4px 0 0; font-size:12px; color:#5f5e5a;">Sum of every key picked up across every trial's run history — not the current stash contents, and not editable.</p>
+    <strong>🗝️ Keys Collected (selected period)</strong>
+    <p style="margin:4px 0 0; font-size:12px; color:#5f5e5a;">Keys picked up within the date-range/hour filters above — not the current stash contents, and not editable.</p>
     <div class="key-counts-grid">
       <div class="key-count-box"><p>👹 Terror</p><p id="historyKeyTerror">-</p></div>
       <div class="key-count-box hate"><p>🔥 Hate</p><p id="historyKeyHate">-</p></div>
@@ -1896,7 +1896,13 @@ let _lastGoldCollected = 0;
 async function refreshHistory() {
   const [runs, runStats, trialCount] = await Promise.all([loadRuns(), loadRunStats(), loadTrialCount()]);
   _lastHistoryRuns = runs;
-  if (currentBot === "summoner") refreshHistoryKeyCounts();
+  if (currentBot === "summoner") {
+    // Keys collected within the selected range/hour filters, summed from the
+    // already-fetched (fully paginated) runs -- same Hate-only convention as
+    // loadTotalKeysCollected(): Summoner can't tell key subtypes apart.
+    const keys = runs.reduce((sum, r) => sum + (r.loots || []).filter(l => l.is_key).length, 0);
+    renderHistoryKeyCounts({ terror: 0, hate: keys, destruction: 0 });
+  }
   if (currentBot === "warlock") {
     // gold_collected/merc_revivals live on warlock_trials, not per-run —
     // summed server-side (see supabase/migrations/0014_history_stats_rpc.sql)
