@@ -181,6 +181,17 @@ function statsBlockHtml(rows) {
   let soldTotal = 0, estRows = 0;
   rows.forEach(r => { const g = soldGold(r); soldTotal += g.v; if (g.est) estRows++; });
   const netSpent = goldSpent - soldTotal;
+  // Avg sale price uses MEASURED trials only (gold_sold recorded); estimated
+  // rows would just echo EST_SALE_PRICE back.
+  let measuredSold = 0, measuredCoronets = 0, measuredRows = 0;
+  rows.forEach(r => {
+    if (r.gold_sold !== null && r.gold_sold !== undefined) {
+      measuredSold += r.gold_sold;
+      measuredCoronets += Math.max(0, (r.coronets_bought || 0) - (r.coronets_kept || 0));
+      measuredRows++;
+    }
+  });
+  const avgSale = measuredCoronets > 0 ? Math.round(measuredSold / measuredCoronets).toLocaleString() : "—";
   const approx = estRows > 0 ? "≈ " : "";
   const netNote = estRows > 0
     ? `${estRows} of ${rows.length} trial(s) estimated from avg sale price (${EST_SALE_PRICE.toLocaleString()}/coronet)`
@@ -196,6 +207,7 @@ function statsBlockHtml(rows) {
       <div class="stat-box" title="Gross gold spent minus gold from selling the non-keepers back. ${netNote}"><div class="stat-label">Net Gold Spent</div><div class="stat-value">${approx}${netSpent.toLocaleString()}</div></div>
       <div class="stat-box" title="Net gold spent ÷ coronets kept. ${netNote}"><div class="stat-label">Net Gold per Keeper</div><div class="stat-value">${netPer(kept)}</div></div>
       <div class="stat-box" title="Net gold spent ÷ coronets bought. ${netNote}"><div class="stat-label">Net Price per Coronet</div><div class="stat-value">${netPer(bought)}</div></div>
+      <div class="stat-box" title="Gold received per non-keeper coronet sold back. Measured trials only (${measuredRows} of ${rows.length} in this period); older trials have no sale data."><div class="stat-label">Avg Gold per Sold Coronet</div><div class="stat-value">${avgSale}</div></div>
       <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Trials</div><div class="stat-value">${rows.length}</div></div>
       <div class="stat-box"><div class="stat-label">Total Time Spent</div><div class="stat-value">${fmtDurSeconds(totalTimeSec)}</div></div>
