@@ -61,6 +61,8 @@
   .cor-group.net { border-color: #3e9a6a; background: rgba(62,154,106,0.10); }
   .cor-group.net .cor-group-title, .cor-group.net .cor-group-sub { color: #6fcf9a; }
   .cor-group .cor-stat-row { margin-bottom: 0; }
+  .cor-group.buying { border-color: #8a7a5a; background: rgba(138,122,90,0.10); }
+  .cor-group.buying .cor-group-title { color: #d8c9a8; }
   .cor-group.time { border-color: #6a6ad8; background: rgba(106,106,216,0.10); }
   .cor-group.time .cor-group-title, .cor-group.time .cor-group-sub { color: #a8a8f0; }
   .cor-group.kept { border-color: #c9a227; background: rgba(201,162,39,0.07); }
@@ -373,6 +375,7 @@
 </div>
 
 <div id="coronetLivePanel" style="display:none;">
+  <div id="corLiveKept"></div>
   <div class="panel">
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
       <strong><span class="status-dot red" id="corLiveDot"></span><span id="corLiveLabel">Live Trial</span></strong>
@@ -2217,8 +2220,8 @@ function corSoldGold(r) {
 
 // rows = trials. opts.batchCount swaps the "Trials" box for a "Batches" box
 // (live view). Same maths as the old standalone coronets page.
-function corStatsBlockHtml(rows, opts = {}) {
-  if (rows.length === 0) return `<div class="empty-state">No trials in this period.</div>`;
+function corStatsParts(rows, opts = {}) {
+  if (rows.length === 0) return null;
   const goldSpent = corSum(rows, "gold_spent");
   const bought = corSum(rows, "coronets_bought");
   const kept = corSum(rows, "coronets_kept");
@@ -2260,7 +2263,8 @@ function corStatsBlockHtml(rows, opts = {}) {
   const timeNote = nB > 0 || kept > 0 || bought > 0 ? "Wall-clock time per unit of work." : "";
   const keptBox = (cls, icon, label, value, sub) =>
     `<div class="cor-kept-box ${cls}"><img src="assets/coronet/${icon}" alt=""><p class="cor-kept-label">${label}</p><p class="cor-kept-value">${value}</p>${sub}</div>`;
-  return `<div class="cor-group kept">
+  return {
+    kept: `<div class="cor-group kept">
       <div class="cor-group-title">Coronets Kept</div>
       <div class="cor-kept-grid">
         ${keptBox("total", "coronet.png", "Total Kept", kept.toLocaleString(), perKeepSub(kept))}
@@ -2269,26 +2273,18 @@ function corStatsBlockHtml(rows, opts = {}) {
         ${keptBox("amazon", "cat-javelins.png", "Amazon + LL/LM", amazon, perKeepSub(amazon))}
         ${keptBox("fwr", "cat-boots.png", "FWR + Skill", fwr, perKeepSub(fwr))}
       </div>
-    </div>
-    <div class="cor-group gross">
-      <div class="cor-group-title">Gross cost — all gold paid</div>
-      <div class="cor-group-sub">Counts every coronet bought; the gold you got back from selling the non-keepers is NOT deducted.</div>
+    </div>`,
+    buying: `<div class="cor-group buying">
+      <div class="cor-group-title">🛒 Buying</div>
       <div class="cor-stat-row">
-        ${box("Total Gold Spent", goldSpent.toLocaleString())}
-        ${box("Avg Gold per Keeper", goldPer(kept), "Total gold spent ÷ coronets kept (gross, before sell proceeds)")}
-        ${box("Avg Price per Coronet", goldPer(bought), "Total gold spent ÷ coronets bought")}
+      ${box("Total Coronets Bought", bought.toLocaleString())}
+      ${box("Avg Bought per Keeper", perKeep(kept), "Coronets bought on average to get one worth keeping (bought ÷ kept)")}
+      ${box("Avg Gold per Sold Coronet", avgSale, `Gold received per non-keeper coronet sold back. Measured trials only (${measuredRows} of ${rows.length}); older trials have no sale data.`)}
+      ${box("Refresh Clicked", refreshClicks.toLocaleString())}
+      ${opts.showTrials ? box("Trials", rows.length) : ""}
       </div>
-    </div>
-    <div class="cor-group net">
-      <div class="cor-group-title">Net cost — after selling back</div>
-      <div class="cor-group-sub">Gross cost with the gold received from sold coronets deducted (${netNote}).</div>
-      <div class="cor-stat-row">
-        ${box("Net Gold Spent", approx + netSpent.toLocaleString(), `Gross gold spent minus gold from selling the non-keepers back. ${netNote}`)}
-        ${box("Net Gold per Keeper", netPer(kept), `Net gold spent ÷ coronets kept. ${netNote}`)}
-        ${box("Net Price per Coronet", netPer(bought), `Net gold spent ÷ coronets bought. ${netNote}`)}
-      </div>
-    </div>
-    <div class="cor-group time">
+    </div>`,
+    time: `<div class="cor-group time">
       <div class="cor-group-title">⏱️ Time</div>
       <div class="cor-group-sub">${timeNote}</div>
       <div class="cor-stat-row">
@@ -2297,14 +2293,33 @@ function corStatsBlockHtml(rows, opts = {}) {
         ${box("⭐ Avg Time per Kept Coronet", avgT(totalTimeSec, kept), "Total time ÷ coronets kept")}
         ${box("🛒 Avg Time per Bought Coronet", avgT(totalTimeSec, bought), "Total time ÷ coronets bought")}
       </div>
-    </div>
-    <div class="cor-stat-row">
-      ${box("Total Coronets Bought", bought.toLocaleString())}
-      ${box("Avg Bought per Keeper", perKeep(kept), "Coronets bought on average to get one worth keeping (bought ÷ kept)")}
-      ${box("Avg Gold per Sold Coronet", avgSale, `Gold received per non-keeper coronet sold back. Measured trials only (${measuredRows} of ${rows.length}); older trials have no sale data.`)}
-      ${box("Refresh Clicked", refreshClicks.toLocaleString())}
-      ${opts.showTrials ? box("Trials", rows.length) : ""}
-    </div>`;
+    </div>`,
+    net: `<div class="cor-group net">
+      <div class="cor-group-title">Net cost — after selling back</div>
+      <div class="cor-group-sub">Gross cost with the gold received from sold coronets deducted (${netNote}).</div>
+      <div class="cor-stat-row">
+        ${box("Net Gold Spent", approx + netSpent.toLocaleString(), `Gross gold spent minus gold from selling the non-keepers back. ${netNote}`)}
+        ${box("Net Gold per Keeper", netPer(kept), `Net gold spent ÷ coronets kept. ${netNote}`)}
+        ${box("Net Price per Coronet", netPer(bought), `Net gold spent ÷ coronets bought. ${netNote}`)}
+      </div>
+    </div>`,
+    gross: `<div class="cor-group gross">
+      <div class="cor-group-title">Gross cost — all gold paid</div>
+      <div class="cor-group-sub">Counts every coronet bought; the gold you got back from selling the non-keepers is NOT deducted.</div>
+      <div class="cor-stat-row">
+        ${box("Total Gold Spent", goldSpent.toLocaleString())}
+        ${box("Avg Gold per Keeper", goldPer(kept), "Total gold spent ÷ coronets kept (gross, before sell proceeds)")}
+        ${box("Avg Price per Coronet", goldPer(bought), "Total gold spent ÷ coronets bought")}
+      </div>
+    </div>`,
+  };
+}
+
+// Period / single-trial view order: kept, buying, time, net cost, gross cost.
+function corStatsBlockHtml(rows, opts = {}) {
+  const P = corStatsParts(rows, opts);
+  if (!P) return `<div class="empty-state">No trials in this period.</div>`;
+  return P.kept + P.buying + P.time + P.net + P.gross;
 }
 
 function corKeptChips(b) {
@@ -2350,6 +2365,7 @@ async function coronetRefreshLive() {
   const trial = !error && data && data.length ? data[0] : null;
   const showAll = !!trial;
   document.getElementById("corLiveEmpty").style.display = showAll ? "none" : "";
+  if (!showAll) document.getElementById("corLiveKept").innerHTML = "";
   document.getElementById("corLiveSummaryPanel").style.display = showAll ? "" : "none";
   document.getElementById("corLiveBatchPanel").style.display = showAll ? "" : "none";
   if (!trial) return;
@@ -2368,7 +2384,9 @@ async function coronetRefreshLive() {
   const staleNote = stale ? ` · no activity for ${corFmtDur(staleMin * 60)} — bot probably stopped without closing the trial` : "";
   document.getElementById("corLiveMeta").textContent =
     `Started ${new Date(trial.started_at).toLocaleString()} · ${corFmtDur(corTrialSec(trial))} ${isRunning ? "elapsed" : "total"} · ${rule}${stop}${staleNote}`;
-  document.getElementById("corLiveSummary").innerHTML = corStatsBlockHtml([trial], { batchCount: batches.length });
+  const P = corStatsParts([trial], { batchCount: batches.length });
+  document.getElementById("corLiveKept").innerHTML = P.kept;
+  document.getElementById("corLiveSummary").innerHTML = P.buying + P.time + P.net + P.gross;
   // One-line live summary, same style as the Warlock/Summoner live pages.
   const tSec = corTrialSec(trial), nBought = trial.coronets_bought || 0, nKept = trial.coronets_kept || 0;
   const per = (n) => n > 0 ? fmtSeconds(tSec / n) : "—";
