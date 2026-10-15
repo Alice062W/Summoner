@@ -149,6 +149,16 @@ function fmtDurSeconds(totalSec) {
 // the latter case summing one row's own duration IS that trial's total
 // time, so "Total Time Spent" here doubles as "this trial's duration" with
 // no separate code path needed, per user request 2026-08-30.
+// Anya pays about this much per non-keeper coronet sold back (mean of 451
+// clean no-keeper batches in the 2026 orchestrator logs, 28.4k-29.5k across
+// every slice of the data). Used only for trials recorded before
+// coronet_trials.gold_sold existed (gold_sold IS NULL).
+const EST_SALE_PRICE = 28700;
+function soldGold(r) {
+  if (r.gold_sold !== null && r.gold_sold !== undefined) return { v: r.gold_sold, est: false };
+  return { v: Math.max(0, (r.coronets_bought || 0) - (r.coronets_kept || 0)) * EST_SALE_PRICE, est: true };
+}
+
 function statsBlockHtml(rows) {
   if (rows.length === 0) {
     return `<div class="empty-state">No trials in this period.</div>`;
@@ -166,6 +176,16 @@ function statsBlockHtml(rows) {
   const perKeep = n => n > 0 ? (bought / n).toFixed(1) : "—";
   // Gold-based averages use gross gold spent (sell proceeds are not subtracted).
   const goldPer = n => n > 0 ? Math.round(goldSpent / n).toLocaleString() : "—";
+  // Net = gross spend minus what the non-keepers sold back for. Trials that
+  // predate gold_sold are estimated (see EST_SALE_PRICE) and marked "≈".
+  let soldTotal = 0, estRows = 0;
+  rows.forEach(r => { const g = soldGold(r); soldTotal += g.v; if (g.est) estRows++; });
+  const netSpent = goldSpent - soldTotal;
+  const approx = estRows > 0 ? "≈ " : "";
+  const netNote = estRows > 0
+    ? `${estRows} of ${rows.length} trial(s) estimated from avg sale price (${EST_SALE_PRICE.toLocaleString()}/coronet)`
+    : "measured from in-game gold";
+  const netPer = n => n > 0 ? approx + Math.round(netSpent / n).toLocaleString() : "—";
   const perKeepSub = n => `<div style="font-size:11px;color:#a8916a;">1 per ${perKeep(n)} bought</div>`;
   return `<div class="stat-row">
       <div class="stat-box"><div class="stat-label">Total Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
@@ -173,6 +193,9 @@ function statsBlockHtml(rows) {
       <div class="stat-box" title="Total gold spent ÷ coronets kept (gross, before sell proceeds)"><div class="stat-label">Avg Gold per Keeper</div><div class="stat-value">${goldPer(kept)}</div></div>
       <div class="stat-box" title="Total gold spent ÷ coronets bought"><div class="stat-label">Avg Price per Coronet</div><div class="stat-value">${goldPer(bought)}</div></div>
       <div class="stat-box" title="Coronets bought on average to get one worth keeping (bought ÷ kept)"><div class="stat-label">Avg Bought per Keeper</div><div class="stat-value">${perKeep(kept)}</div></div>
+      <div class="stat-box" title="Gross gold spent minus gold from selling the non-keepers back. ${netNote}"><div class="stat-label">Net Gold Spent</div><div class="stat-value">${approx}${netSpent.toLocaleString()}</div></div>
+      <div class="stat-box" title="Net gold spent ÷ coronets kept. ${netNote}"><div class="stat-label">Net Gold per Keeper</div><div class="stat-value">${netPer(kept)}</div></div>
+      <div class="stat-box" title="Net gold spent ÷ coronets bought. ${netNote}"><div class="stat-label">Net Price per Coronet</div><div class="stat-value">${netPer(bought)}</div></div>
       <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Trials</div><div class="stat-value">${rows.length}</div></div>
       <div class="stat-box"><div class="stat-label">Total Time Spent</div><div class="stat-value">${fmtDurSeconds(totalTimeSec)}</div></div>
