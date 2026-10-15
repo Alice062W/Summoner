@@ -382,6 +382,7 @@
       <span id="corLiveUpdated" class="cor-meta" style="margin:0;"></span>
     </div>
     <div id="corLiveLine" style="margin:10px 0 0; font-size:14px;"></div>
+    <p id="corLiveInProgress" style="margin:4px 0 0; font-size:13px; color:#378ADD;"></p>
     <div id="corLiveMeta" class="cor-meta"></div>
     <div id="corLiveEmpty" class="empty-state" style="display:none;">No Warlock_bet trials recorded yet.</div>
   </div>
@@ -2394,6 +2395,9 @@ async function coronetRefreshLive() {
     `${batches.length} batches — ${nBought} coronets bought — avg ${per(nBought)}/coronet — avg ${per(nKept)}/kept coronet — total ${fmtSeconds(tSec)}`;
   document.getElementById("corLiveBatchBody").innerHTML = corBatchRowsHtml(batches);
   document.getElementById("corLiveBatchEmpty").style.display = batches.length ? "none" : "";
+  // Same cue as the Summoner/Warlock live pages ("Run N in progress…").
+  document.getElementById("corLiveInProgress").innerHTML = isRunning
+    ? `Batch <span class="current-run-highlight">${batches.length + 1}</span> in progress…` : "";
   document.getElementById("corLiveUpdated").textContent = "updated " + new Date().toLocaleTimeString();
 }
 
