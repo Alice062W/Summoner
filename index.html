@@ -268,6 +268,7 @@
 
   <div class="cards">
     <div class="card"><p>Total runs</p><p id="statRuns">-</p></div>
+    <div class="card" id="statTotalKeysCard" title="All keys ever picked up across every trial — ignores the filters above"><p>🔥 Total Keys of Hate</p><p id="statTotalKeys">-</p></div>
     <div class="card"><p>Total trials</p><p id="statTrials">-</p></div>
     <div class="card"><p>Avg time / run</p><p id="statAvgTime">-</p></div>
     <div class="card" id="statTotalTimeCard" style="display:none;"><p>Total Time Spent</p><p id="statTotalTime">-</p></div>
@@ -540,6 +541,7 @@ function initBotUI() {
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("statChronicleCard").style.display = isWarlock ? "" : "none";
   document.getElementById("statTotalTimeCard").style.display = isWarlock ? "" : "none";
+  document.getElementById("statTotalKeysCard").style.display = isWarlock ? "none" : "";
   document.getElementById("statRunsPerHourCard").style.display = isWarlock ? "none" : "";
   document.getElementById("statKeysPerHourCard").style.display = isWarlock ? "none" : "";
   document.getElementById("statValuableCard").style.display = isWarlock ? "" : "none";
@@ -1902,6 +1904,10 @@ async function refreshHistory() {
     // loadTotalKeysCollected(): Summoner can't tell key subtypes apart.
     const keys = runs.reduce((sum, r) => sum + (r.loots || []).filter(l => l.is_key).length, 0);
     renderHistoryKeyCounts({ terror: 0, hate: keys, destruction: 0 });
+    // All-time total (ignores filters) via the total_keys_collected() RPC.
+    loadTotalKeysCollected().then(c => {
+      document.getElementById("statTotalKeys").textContent = c.hate;
+    });
   }
   if (currentBot === "warlock") {
     // gold_collected/merc_revivals live on warlock_trials, not per-run —
