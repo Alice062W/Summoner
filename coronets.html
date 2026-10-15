@@ -164,10 +164,14 @@ function statsBlockHtml(rows) {
   const totalTimeSec = rows.reduce((s, r) => s + trialDurationSec(r), 0);
   // Average coronets bought per keeper ("1 kept per N bought"); "—" when none kept.
   const perKeep = n => n > 0 ? (bought / n).toFixed(1) : "—";
+  // Gold-based averages use gross gold spent (sell proceeds are not subtracted).
+  const goldPer = n => n > 0 ? Math.round(goldSpent / n).toLocaleString() : "—";
   const perKeepSub = n => `<div style="font-size:11px;color:#a8916a;">1 per ${perKeep(n)} bought</div>`;
   return `<div class="stat-row">
       <div class="stat-box"><div class="stat-label">Total Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Total Coronets Bought</div><div class="stat-value">${bought.toLocaleString()}</div></div>
+      <div class="stat-box" title="Total gold spent ÷ coronets kept (gross, before sell proceeds)"><div class="stat-label">Avg Gold per Keeper</div><div class="stat-value">${goldPer(kept)}</div></div>
+      <div class="stat-box" title="Total gold spent ÷ coronets bought"><div class="stat-label">Avg Price per Coronet</div><div class="stat-value">${goldPer(bought)}</div></div>
       <div class="stat-box" title="Coronets bought on average to get one worth keeping (bought ÷ kept)"><div class="stat-label">Avg Bought per Keeper</div><div class="stat-value">${perKeep(kept)}</div></div>
       <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Trials</div><div class="stat-value">${rows.length}</div></div>
