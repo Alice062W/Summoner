@@ -162,19 +162,23 @@ function statsBlockHtml(rows) {
   const amazon = sumField(rows, "kept_amazon_llm");
   const fwr = sumField(rows, "kept_fwr");
   const totalTimeSec = rows.reduce((s, r) => s + trialDurationSec(r), 0);
+  // Average coronets bought per keeper ("1 kept per N bought"); "—" when none kept.
+  const perKeep = n => n > 0 ? (bought / n).toFixed(1) : "—";
+  const perKeepSub = n => `<div style="font-size:11px;color:#a8916a;">1 per ${perKeep(n)} bought</div>`;
   return `<div class="stat-row">
       <div class="stat-box"><div class="stat-label">Total Gold Spent</div><div class="stat-value">${goldSpent.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Total Coronets Bought</div><div class="stat-value">${bought.toLocaleString()}</div></div>
+      <div class="stat-box" title="Coronets bought on average to get one worth keeping (bought ÷ kept)"><div class="stat-label">Avg Bought per Keeper</div><div class="stat-value">${perKeep(kept)}</div></div>
       <div class="stat-box"><div class="stat-label">Refresh Clicked</div><div class="stat-value">${refreshClicks.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">Trials</div><div class="stat-value">${rows.length}</div></div>
       <div class="stat-box"><div class="stat-label">Total Time Spent</div><div class="stat-value">${fmtDurSeconds(totalTimeSec)}</div></div>
     </div>
     <div class="breakdown-row">
-      <div class="breakdown-box"><div class="breakdown-label">Total Coronets Kept</div><div class="breakdown-value">${kept.toLocaleString()}</div></div>
-      <div class="breakdown-box fcr"><div class="breakdown-label">FCR + Skill</div><div class="breakdown-value">${fcr}</div></div>
-      <div class="breakdown-box sockets"><div class="breakdown-label">3 Sockets</div><div class="breakdown-value">${sockets}</div></div>
-      <div class="breakdown-box amazon"><div class="breakdown-label">Amazon + LL/LM</div><div class="breakdown-value">${amazon}</div></div>
-      <div class="breakdown-box fwr"><div class="breakdown-label">FWR + Skill</div><div class="breakdown-value">${fwr}</div></div>
+      <div class="breakdown-box"><div class="breakdown-label">Total Coronets Kept</div><div class="breakdown-value">${kept.toLocaleString()}</div>${perKeepSub(kept)}</div>
+      <div class="breakdown-box fcr"><div class="breakdown-label">FCR + Skill</div><div class="breakdown-value">${fcr}</div>${perKeepSub(fcr)}</div>
+      <div class="breakdown-box sockets"><div class="breakdown-label">3 Sockets</div><div class="breakdown-value">${sockets}</div>${perKeepSub(sockets)}</div>
+      <div class="breakdown-box amazon"><div class="breakdown-label">Amazon + LL/LM</div><div class="breakdown-value">${amazon}</div>${perKeepSub(amazon)}</div>
+      <div class="breakdown-box fwr"><div class="breakdown-label">FWR + Skill</div><div class="breakdown-value">${fwr}</div>${perKeepSub(fwr)}</div>
     </div>`;
 }
 
