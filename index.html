@@ -2226,6 +2226,15 @@ function corTrialSec(r) {
   const end = r.ended_at ? new Date(r.ended_at) : new Date();
   return Math.max(0, (end - start) / 1000);
 }
+const COR_STOP_LABELS = {
+  gold_depleted: "gold depleted — shared stash too low",
+  user_stopped: "stopped by user (F12)",
+  stopped_externally: "stopped externally (F12/exit/crash)",
+  stash_not_found: "stash chest not found",
+  gamble_window_not_found: "couldn't open Anya's gamble window",
+  game_enter_failed: "game enter failed (connection issue?)",
+};
+function corStopText(reason) { return COR_STOP_LABELS[reason] || reason || "unknown reason"; }
 const COR_STALE_MIN = 60;   // open trial with no batch/start activity for this long = "probably stopped"
 function corFmtDur(sec) {
   sec = Math.max(0, Math.round(sec));
@@ -2485,21 +2494,22 @@ async function coronetRefreshLive() {
   const isRunning = !trial.ended_at && !stale;
   document.getElementById("corLiveDot").className = "status-dot " + (isRunning ? "green" : "red");
   document.getElementById("corLiveLabel").textContent =
-    (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id;
+    (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id +
+    (trial.ended_at ? ` (stopped: ${corStopText(trial.stop_reason)})` : "");
   const rule = trial.strict_rule ? "Strict rule" : "General rule";
-  const stop = trial.ended_at && trial.stop_reason ? ` · stopped: ${trial.stop_reason}` : "";
+  const stop = "";
   const staleNote = stale ? ` · no activity for ${corFmtDur(staleMin * 60)} — bot probably stopped without closing the trial` : "";
   document.getElementById("corLiveMeta").textContent =
     `Started ${new Date(trial.started_at).toLocaleString()} · ${corFmtDur(corTrialSec(trial))} ${isRunning ? "elapsed" : "total"} · ${rule}${stop}${staleNote}`;
   const P = corStatsParts([trial], { batchCount: batches.length });
   document.getElementById("corLiveKept").innerHTML = P.kept;
   document.getElementById("corLiveSummary").innerHTML = P.buying + P.time + P.net + P.gross;
+  const runs = corGroupRuns(batches);
   // One-line live summary, same style as the Warlock/Summoner live pages.
   const tSec = corTrialSec(trial), nBought = trial.coronets_bought || 0, nKept = trial.coronets_kept || 0;
   const per = (n) => n > 0 ? fmtSeconds(tSec / n) : "—";
   document.getElementById("corLiveLine").textContent =
     `${batches.length} batches — ${runs.length} runs — ${nBought} coronets bought — avg ${per(nBought)}/coronet — avg ${per(nKept)}/kept coronet — total ${fmtSeconds(tSec)}`;
-  const runs = corGroupRuns(batches);
   document.getElementById("corLiveRunHead").innerHTML = COR_RUN_HEAD;
   document.getElementById("corLiveRunBody").innerHTML = corRunRowsHtml(runs, isRunning);
   document.getElementById("corLiveBatchBody").innerHTML = corBatchRowsHtml(batches);
@@ -2563,7 +2573,7 @@ async function corShowTrialDetail(trialId) {
         <tbody>${corBatchRowsHtml(batches)}</tbody></table>`
     : `<div class="empty-state">No per-batch data for this trial (recorded before batch tracking existed).</div>`;
   el.innerHTML = `<p class="cor-meta"><strong>Started:</strong> ${new Date(r.started_at).toLocaleString()} &nbsp; <strong>Ended:</strong> ${r.ended_at ? new Date(r.ended_at).toLocaleString() : "(still running)"} &nbsp; ${rule}</p>
-    <p class="cor-meta"><strong>Stop reason:</strong> ${r.stop_reason || "-"}</p>
+    <p class="cor-meta"><strong>Stop reason:</strong> ${r.ended_at ? corStopText(r.stop_reason) : "-"}</p>
     ${corStatsBlockHtml([r], { batchCount: batches.length || undefined })}${runTable}${batchTable}`;
 }
 
