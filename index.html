@@ -41,6 +41,25 @@
   .key-item { color: #f0d878; font-weight: 700; }
   #deleteTrialBtn { color: #d87878; border: 1px solid #9c3a3a; background: #221212; cursor: pointer; padding: 4px 10px; border-radius: 6px; font-size: 13px; }
   .key-row { background: linear-gradient(90deg, rgba(201,162,39,0.18), transparent 60%); box-shadow: inset 3px 0 0 #c9a227; }
+  .cor-stat-row { display: flex; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+  .cor-stat-box { flex: 1; min-width: 150px; background: linear-gradient(160deg, #3a2410, #221a12); border: 1px solid #6a5232; border-radius: 10px; padding: 10px 14px; }
+  .cor-stat-box .cor-stat-label { font-size: 12px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .cor-stat-box .cor-stat-value { font-size: 26px; font-weight: 700; color: #f0d878; font-family: 'Cinzel', serif; }
+  .cor-breakdown-row { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .cor-breakdown-box { flex: 1; min-width: 140px; background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 8px 12px; text-align: center; }
+  .cor-breakdown-box .cor-breakdown-label { font-size: 11px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.03em; }
+  .cor-breakdown-box .cor-breakdown-value { font-size: 20px; font-weight: 700; color: #d8c9a8; }
+  .cor-breakdown-box.fcr { border-color: #378ADD; } .cor-breakdown-box.fcr .cor-breakdown-value { color: #6fb3f0; }
+  .cor-breakdown-box.sockets { border-color: #1D9E75; } .cor-breakdown-box.sockets .cor-breakdown-value { color: #3ecf9a; }
+  .cor-breakdown-box.amazon { border-color: #9C5FD8; } .cor-breakdown-box.amazon .cor-breakdown-value { color: #c39cf0; }
+  .cor-breakdown-box.fwr { border-color: #E0A030; } .cor-breakdown-box.fwr .cor-breakdown-value { color: #f0c26a; }
+  .cor-chip { display: inline-block; border-radius: 6px; padding: 1px 7px; margin-right: 4px; font-size: 12px; border: 1px solid #4a3a24; }
+  .cor-chip.fcr { border-color: #378ADD; color: #6fb3f0; } .cor-chip.sockets { border-color: #1D9E75; color: #3ecf9a; }
+  .cor-chip.amazon { border-color: #9C5FD8; color: #c39cf0; } .cor-chip.fwr { border-color: #E0A030; color: #f0c26a; }
+  .cor-meta { font-size: 13px; color: #a8916a; margin: 6px 0 0; }
+  .cor-hist-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .cor-hist-controls label { font-size: 12px; color: #a8916a; }
+  canvas#corHistoryChart { max-height: 320px; }
   .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 13px; margin-top: 8px; }
   .legend-grid > div { display: flex; align-items: center; gap: 6px; }
   .legend-grid .status-dot { margin-right: 0; }
@@ -92,11 +111,11 @@
   <span class="bot-switcher">
     <button class="tab-btn active" id="botBtnSummoner" onclick="setBot('summoner')">Summoner</button>
     <button class="tab-btn" id="botBtnWarlock" onclick="setBot('warlock')">Warlock</button>
+    <button class="tab-btn" id="botBtnCoronet" onclick="setBot('coronet')">Coronet</button>
   </span>
   <button class="tab-btn active" id="tabBtnLive" onclick="showTab('live')">Live Trial</button>
   <button class="tab-btn" id="tabBtnHistory" onclick="showTab('history')">History</button>
   <a class="tab-btn" href="gems.html" style="text-decoration:none; float:right; margin-left:4px;">Gem Scan</a>
-  <a class="tab-btn" href="coronets.html" style="text-decoration:none; float:right; margin-left:4px;">Coronets</a>
   <a class="tab-btn" href="orchestrator.html" style="text-decoration:none; float:right; margin-left:4px;">Warlock Auto</a>
   <button class="tab-btn" id="legendToggleBtn" onclick="toggleLegend()" style="float:right;">ⓘ Legend</button>
 </div>
@@ -327,6 +346,61 @@
   </div>
 </div>
 
+<div id="coronetLivePanel" style="display:none;">
+  <div class="panel">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+      <strong><span class="status-dot red" id="corLiveDot"></span><span id="corLiveLabel">Live Trial</span></strong>
+      <span id="corLiveUpdated" class="cor-meta" style="margin:0;"></span>
+    </div>
+    <div id="corLiveMeta" class="cor-meta"></div>
+    <div id="corLiveEmpty" class="empty-state" style="display:none;">No Warlock_bet trials recorded yet.</div>
+  </div>
+  <div class="panel" id="corLiveSummaryPanel">
+    <h3 style="margin:0 0 10px;">Trial Summary</h3>
+    <div id="corLiveSummary"></div>
+  </div>
+  <div class="panel" id="corLiveBatchPanel">
+    <h3 style="margin:0 0 10px;">Batches (this trial, newest first)</h3>
+    <table class="run-table">
+      <thead><tr><th>batch</th><th>status</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>when</th></tr></thead>
+      <tbody id="corLiveBatchBody"></tbody>
+    </table>
+    <div id="corLiveBatchEmpty" class="empty-state" style="display:none;">No batches finished yet.</div>
+  </div>
+</div>
+
+<div id="coronetHistoryPanel" style="display:none;">
+  <div class="panel">
+    <h3 style="margin:0 0 10px;">Stats — Selected Period</h3>
+    <div class="cor-hist-controls">
+      <label for="corRangeFilter">Range:</label>
+      <select id="corRangeFilter">
+        <option value="12">Last 12 hours</option>
+        <option value="24">Last 1 day</option>
+        <option value="72">Last 3 days</option>
+        <option value="168" selected>Last 7 days</option>
+        <option value="336">Last 2 weeks</option>
+        <option value="720">Last month</option>
+        <option value="0">All time</option>
+      </select>
+    </div>
+    <div id="corPeriodStats"></div>
+  </div>
+  <div class="panel">
+    <h3 style="margin:0 0 10px;">Coronets Kept Over Time</h3>
+    <canvas id="corHistoryChart"></canvas>
+    <div id="corHistoryEmpty" class="empty-state" style="display:none;">No trials in this range yet.</div>
+  </div>
+  <div class="panel">
+    <h3 style="margin:0 0 10px;">View a Past Trial</h3>
+    <div class="cor-hist-controls">
+      <label for="corTrialPicker">Trial:</label>
+      <select id="corTrialPicker"><option value="">Choose a trial…</option></select>
+    </div>
+    <div id="corTrialDetail"></div>
+  </div>
+</div>
+
 <script>
 const SUPABASE_URL = "https://vvsuibcrudmckruervwl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_rCe50ZuheZbLbNgIB8PjNQ_ec8cS2JP";
@@ -357,6 +431,7 @@ const DELETE_PASSPHRASE = "571028";
 // matching rows was showing a wrong, constant number).
 const BOT_CONFIGS = {
   summoner: { trialsTable: "summoner_trials", runsTable: "summoner_runs", hasArmChart: true, title: "Summoner bot dashboard", runStatsRpc: "summoner_run_stats", trialCountRpc: "summoner_trial_count" },
+  coronet:  { title: "Coronet bot dashboard" },
   warlock:  { trialsTable: "warlock_trials",  runsTable: "warlock_runs",  hasArmChart: false, title: "Warlock bot dashboard", runStatsRpc: "warlock_run_stats", trialCountRpc: "warlock_trial_count" },
 };
 let currentBot = localStorage.getItem("selectedBot") || "summoner";
@@ -505,9 +580,15 @@ function lootRowIcon(l) {
   return `<span title="${l.label}">📦</span>`;
 }
 
+let currentTab = "live";
 function showTab(name) {
-  document.getElementById("liveTabPanel").style.display = name === "live" ? "" : "none";
-  document.getElementById("historyTabPanel").style.display = name === "history" ? "" : "none";
+  currentTab = name;
+  const cor = currentBot === "coronet";
+  document.getElementById("liveTabPanel").style.display = !cor && name === "live" ? "" : "none";
+  document.getElementById("historyTabPanel").style.display = !cor && name === "history" ? "" : "none";
+  document.getElementById("coronetLivePanel").style.display = cor && name === "live" ? "" : "none";
+  document.getElementById("coronetHistoryPanel").style.display = cor && name === "history" ? "" : "none";
+  if (cor && name === "history") coronetRefreshHistory();
   document.getElementById("tabBtnLive").classList.toggle("active", name === "live");
   document.getElementById("tabBtnHistory").classList.toggle("active", name === "history");
 }
@@ -525,8 +606,10 @@ function toggleLegend() {
 // and every time setBot() switches bots.
 function initBotUI() {
   const isWarlock = currentBot === "warlock";
-  document.getElementById("botBtnSummoner").classList.toggle("active", !isWarlock);
+  document.getElementById("botBtnSummoner").classList.toggle("active", currentBot === "summoner");
   document.getElementById("botBtnWarlock").classList.toggle("active", isWarlock);
+  document.getElementById("botBtnCoronet").classList.toggle("active", currentBot === "coronet");
+  showTab(currentTab);
   document.title = BOT_CONFIGS[currentBot].title;
   document.getElementById("armChartPanel").style.display = isWarlock ? "none" : "";
   document.getElementById("statCard4Label").textContent = isWarlock ? "Merc rev. / Stash fails" : "Avg runs / key";
@@ -1788,6 +1871,7 @@ function renderWarlockRunFeed(tbodyId, runs, idPrefix) {
 }
 
 async function refreshLive() {
+  if (currentBot === "coronet") return coronetRefreshLive();
   const trial = await loadMostRecentTrial();
   if (!trial) {
     document.getElementById("liveEmpty").style.display = "";
@@ -1854,6 +1938,7 @@ function renderKeyHateBadge(runs) {
 let _lastHistoryRuns = [];
 let _lastGoldCollected = 0;
 async function refreshHistory() {
+  if (currentBot === "coronet") return currentTab === "history" ? coronetRefreshHistory() : undefined;
   const [runs, runStats, trialCount] = await Promise.all([loadRuns(), loadRunStats(), loadTrialCount()]);
   _lastHistoryRuns = runs;
   if (currentBot === "summoner") {
@@ -1893,6 +1978,7 @@ async function refreshHistory() {
 }
 
 async function populateTrialPicker() {
+  if (currentBot === "coronet") return;
   const trials = await loadTrialList();
   const sel = document.getElementById("trialPicker");
   const prevValue = sel.value;
@@ -2073,6 +2159,224 @@ setupCollapsibleChartPanel("lootLineChartPanel", () => lootLineChart);
 setupCollapsibleChartPanel("durationChartPanel", () => durationChart);
 setupCollapsibleChartPanel("lootCountChartPanel", () => lootCountChart);
 setupCollapsibleChartPanel("lootDurationChartPanel", () => lootDurationChart);
+
+// ───────────────────────── Coronet (Warlock_bet) ─────────────────────────
+// Third bot on this page. Live tab = current/last betting trial + its
+// per-batch rows (coronet_batches); History tab = period stats, chart and a
+// per-trial drill-down. Everything is prefixed cor*/cor- so it can't collide
+// with the Summoner/Warlock code above.
+const COR_EST_SALE_PRICE = 28700;   // avg gold per non-keeper sold back (451 clean no-keeper batches in the logs); used only where gold_sold is NULL
+const COR_STATUS_LABEL = { complete: "complete", low_gold: "low gold", aborted: "aborted" };
+
+function corSum(rows, f) { return rows.reduce((s, r) => s + (r[f] || 0), 0); }
+function corTrialSec(r) {
+  const end = r.ended_at ? new Date(r.ended_at) : new Date();
+  return Math.max(0, (end - new Date(r.started_at)) / 1000);
+}
+function corFmtDur(sec) {
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h > 0 ? `${h}h${m}m` : `${m}m${String(s).padStart(2, "0")}s`;
+}
+function corSoldGold(r) {
+  if (r.gold_sold !== null && r.gold_sold !== undefined) return { v: r.gold_sold, est: false };
+  return { v: Math.max(0, (r.coronets_bought || 0) - (r.coronets_kept || 0)) * COR_EST_SALE_PRICE, est: true };
+}
+
+// rows = trials. opts.batchCount swaps the "Trials" box for a "Batches" box
+// (live view). Same maths as the old standalone coronets page.
+function corStatsBlockHtml(rows, opts = {}) {
+  if (rows.length === 0) return `<div class="empty-state">No trials in this period.</div>`;
+  const goldSpent = corSum(rows, "gold_spent");
+  const bought = corSum(rows, "coronets_bought");
+  const kept = corSum(rows, "coronets_kept");
+  const refreshClicks = corSum(rows, "refresh_clicks");
+  const fcr = corSum(rows, "kept_fcr_skill"), sockets = corSum(rows, "kept_3sockets");
+  const amazon = corSum(rows, "kept_amazon_llm"), fwr = corSum(rows, "kept_fwr");
+  const totalTimeSec = rows.reduce((s, r) => s + corTrialSec(r), 0);
+  const perKeep = n => n > 0 ? (bought / n).toFixed(1) : "—";
+  const goldPer = n => n > 0 ? Math.round(goldSpent / n).toLocaleString() : "—";
+  let soldTotal = 0, estRows = 0;
+  rows.forEach(r => { const g = corSoldGold(r); soldTotal += g.v; if (g.est) estRows++; });
+  const netSpent = goldSpent - soldTotal;
+  let measuredSold = 0, measuredCoronets = 0, measuredRows = 0;
+  rows.forEach(r => {
+    if (r.gold_sold !== null && r.gold_sold !== undefined) {
+      measuredSold += r.gold_sold;
+      measuredCoronets += Math.max(0, (r.coronets_bought || 0) - (r.coronets_kept || 0));
+      measuredRows++;
+    }
+  });
+  const avgSale = measuredCoronets > 0 ? Math.round(measuredSold / measuredCoronets).toLocaleString() : "—";
+  const approx = estRows > 0 ? "≈ " : "";
+  const netNote = estRows > 0
+    ? `${estRows} of ${rows.length} trial(s) estimated from avg sale price (${COR_EST_SALE_PRICE.toLocaleString()}/coronet)`
+    : "measured from in-game gold";
+  const netPer = n => n > 0 ? approx + Math.round(netSpent / n).toLocaleString() : "—";
+  const perKeepSub = n => `<div style="font-size:11px;color:#a8916a;">1 per ${perKeep(n)} bought</div>`;
+  const box = (label, value, title) =>
+    `<div class="cor-stat-box"${title ? ` title="${title}"` : ""}><div class="cor-stat-label">${label}</div><div class="cor-stat-value">${value}</div></div>`;
+  const countBox = opts.batchCount !== undefined
+    ? box("Batches", opts.batchCount) : box("Trials", rows.length);
+  return `<div class="cor-stat-row">
+      ${box("Total Gold Spent", goldSpent.toLocaleString())}
+      ${box("Total Coronets Bought", bought.toLocaleString())}
+      ${box("Avg Gold per Keeper", goldPer(kept), "Total gold spent ÷ coronets kept (gross, before sell proceeds)")}
+      ${box("Avg Price per Coronet", goldPer(bought), "Total gold spent ÷ coronets bought")}
+      ${box("Avg Bought per Keeper", perKeep(kept), "Coronets bought on average to get one worth keeping (bought ÷ kept)")}
+      ${box("Net Gold Spent", approx + netSpent.toLocaleString(), `Gross gold spent minus gold from selling the non-keepers back. ${netNote}`)}
+      ${box("Net Gold per Keeper", netPer(kept), `Net gold spent ÷ coronets kept. ${netNote}`)}
+      ${box("Net Price per Coronet", netPer(bought), `Net gold spent ÷ coronets bought. ${netNote}`)}
+      ${box("Avg Gold per Sold Coronet", avgSale, `Gold received per non-keeper coronet sold back. Measured trials only (${measuredRows} of ${rows.length}); older trials have no sale data.`)}
+      ${box("Refresh Clicked", refreshClicks.toLocaleString())}
+      ${countBox}
+      ${box("Total Time Spent", corFmtDur(totalTimeSec))}
+    </div>
+    <div class="cor-breakdown-row">
+      <div class="cor-breakdown-box"><div class="cor-breakdown-label">Total Coronets Kept</div><div class="cor-breakdown-value">${kept.toLocaleString()}</div>${perKeepSub(kept)}</div>
+      <div class="cor-breakdown-box fcr"><div class="cor-breakdown-label">FCR + Skill</div><div class="cor-breakdown-value">${fcr}</div>${perKeepSub(fcr)}</div>
+      <div class="cor-breakdown-box sockets"><div class="cor-breakdown-label">3 Sockets</div><div class="cor-breakdown-value">${sockets}</div>${perKeepSub(sockets)}</div>
+      <div class="cor-breakdown-box amazon"><div class="cor-breakdown-label">Amazon + LL/LM</div><div class="cor-breakdown-value">${amazon}</div>${perKeepSub(amazon)}</div>
+      <div class="cor-breakdown-box fwr"><div class="cor-breakdown-label">FWR + Skill</div><div class="cor-breakdown-value">${fwr}</div>${perKeepSub(fwr)}</div>
+    </div>`;
+}
+
+function corKeptChips(b) {
+  const chips = [];
+  if (b.kept_fcr_skill) chips.push(`<span class="cor-chip fcr" title="FCR + Skill">FCR ×${b.kept_fcr_skill}</span>`);
+  if (b.kept_3sockets) chips.push(`<span class="cor-chip sockets" title="3 Sockets">3os ×${b.kept_3sockets}</span>`);
+  if (b.kept_amazon_llm) chips.push(`<span class="cor-chip amazon" title="Amazon + LL/LM">Ama ×${b.kept_amazon_llm}</span>`);
+  if (b.kept_fwr) chips.push(`<span class="cor-chip fwr" title="FWR + Skill">FWR ×${b.kept_fwr}</span>`);
+  return chips.length ? chips.join("") : "–";
+}
+
+// Batches arrive newest-first. gold_sold NULL = sale gold not measured for
+// that batch (older build, or the gold read failed) -> net shown as "?".
+function corBatchRowsHtml(batches) {
+  return batches.map(b => {
+    const hasSold = b.gold_sold !== null && b.gold_sold !== undefined;
+    const net = hasSold ? (b.gold_spent - b.gold_sold).toLocaleString() : "?";
+    const keeper = (b.kept || 0) > 0;
+    return `<tr class="${keeper ? "key-row" : ""}">
+      <td data-label="batch">${b.batch_no}</td>
+      <td data-label="status">${COR_STATUS_LABEL[b.status] || b.status || "-"}</td>
+      <td data-label="bought">${b.bought}</td>
+      <td data-label="kept">${keeper ? "⭐ " : ""}${corKeptChips(b)}</td>
+      <td data-label="sold">${b.sold}</td>
+      <td data-label="gold spent">${(b.gold_spent || 0).toLocaleString()}</td>
+      <td data-label="sold for">${hasSold ? b.gold_sold.toLocaleString() : "?"}</td>
+      <td data-label="net">${net}</td>
+      <td data-label="refresh">${b.refresh_clicks || 0}</td>
+      <td data-label="took">${b.duration_s != null ? corFmtDur(b.duration_s) : "-"}</td>
+      <td data-label="when">${new Date(b.finished_at).toLocaleTimeString()}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function corLoadBatches(trialId) {
+  return fetchAllPages("coronet_batches", q =>
+    q.eq("trial_id", trialId).order("batch_no", { ascending: false }));
+}
+
+async function coronetRefreshLive() {
+  const { data, error } = await sb.from("coronet_trials").select("*")
+    .order("started_at", { ascending: false }).limit(1);
+  const trial = !error && data && data.length ? data[0] : null;
+  const showAll = !!trial;
+  document.getElementById("corLiveEmpty").style.display = showAll ? "none" : "";
+  document.getElementById("corLiveSummaryPanel").style.display = showAll ? "" : "none";
+  document.getElementById("corLiveBatchPanel").style.display = showAll ? "" : "none";
+  if (!trial) return;
+  const isRunning = !trial.ended_at;
+  document.getElementById("corLiveDot").className = "status-dot " + (isRunning ? "green" : "red");
+  document.getElementById("corLiveLabel").textContent =
+    (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id;
+  const rule = trial.strict_rule ? "Strict rule" : "General rule";
+  const stop = !isRunning && trial.stop_reason ? ` · stopped: ${trial.stop_reason}` : "";
+  document.getElementById("corLiveMeta").textContent =
+    `Started ${new Date(trial.started_at).toLocaleString()} · ${corFmtDur(corTrialSec(trial))} ${isRunning ? "elapsed" : "total"} · ${rule}${stop}`;
+  const batches = await corLoadBatches(trial.trial_id);
+  document.getElementById("corLiveSummary").innerHTML = corStatsBlockHtml([trial], { batchCount: batches.length });
+  document.getElementById("corLiveBatchBody").innerHTML = corBatchRowsHtml(batches);
+  document.getElementById("corLiveBatchEmpty").style.display = batches.length ? "none" : "";
+  document.getElementById("corLiveUpdated").textContent = "updated " + new Date().toLocaleTimeString();
+}
+
+let corHistoryChart = null, _corTrials = [];
+function corRenderChart(rows) {
+  const ctx = document.getElementById("corHistoryChart");
+  const emptyEl = document.getElementById("corHistoryEmpty");
+  if (corHistoryChart) { corHistoryChart.destroy(); corHistoryChart = null; }
+  if (rows.length === 0) { ctx.style.display = "none"; emptyEl.style.display = ""; return; }
+  ctx.style.display = ""; emptyEl.style.display = "none";
+  const ds = (label, f, c, hidden) => ({ label, data: rows.map(r => r[f] || 0), borderColor: c, backgroundColor: c, tension: 0.25, hidden: !!hidden });
+  corHistoryChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: rows.map(r => new Date(r.started_at).toLocaleString()),
+      datasets: [
+        ds("Kept (total)", "coronets_kept", "#f0d878"), ds("FCR + Skill", "kept_fcr_skill", "#378ADD"),
+        ds("3 Sockets", "kept_3sockets", "#1D9E75"), ds("Amazon + LL/LM", "kept_amazon_llm", "#9C5FD8"),
+        ds("FWR + Skill", "kept_fwr", "#E0A030"), ds("Bought", "coronets_bought", "#a8916a", true),
+      ],
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+  });
+}
+
+function corPopulatePicker(rows) {
+  const sel = document.getElementById("corTrialPicker");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Choose a trial…</option>';
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    const opt = document.createElement("option");
+    opt.value = r.trial_id;
+    opt.textContent = `${new Date(r.started_at).toLocaleString()} — ${r.coronets_kept || 0} kept / ${r.coronets_bought || 0} bought`;
+    sel.appendChild(opt);
+  }
+  if (rows.some(r => r.trial_id === prev)) sel.value = prev;
+  else document.getElementById("corTrialDetail").innerHTML = "";
+}
+
+async function corShowTrialDetail(trialId) {
+  const el = document.getElementById("corTrialDetail");
+  if (!trialId) { el.innerHTML = ""; return; }
+  const r = _corTrials.find(t => t.trial_id === trialId);
+  if (!r) return;
+  const batches = await corLoadBatches(trialId);
+  const rule = r.strict_rule ? "Strict rule" : "General rule";
+  const batchTable = batches.length
+    ? `<table class="run-table" style="margin-top:12px;">
+        <thead><tr><th>batch</th><th>status</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>when</th></tr></thead>
+        <tbody>${corBatchRowsHtml(batches)}</tbody></table>`
+    : `<div class="empty-state">No per-batch data for this trial (recorded before batch tracking existed).</div>`;
+  el.innerHTML = `<p class="cor-meta"><strong>Started:</strong> ${new Date(r.started_at).toLocaleString()} &nbsp; <strong>Ended:</strong> ${r.ended_at ? new Date(r.ended_at).toLocaleString() : "(still running)"} &nbsp; ${rule}</p>
+    <p class="cor-meta"><strong>Stop reason:</strong> ${r.stop_reason || "-"}</p>
+    ${corStatsBlockHtml([r], { batchCount: batches.length || undefined })}${batchTable}`;
+}
+
+async function coronetRefreshHistory() {
+  const hours = parseInt(document.getElementById("corRangeFilter").value, 10);
+  _corTrials = await fetchAllPages("coronet_trials", q =>
+    q.gte("started_at", rangeStartIso(hours)).order("started_at", { ascending: true }));
+  document.getElementById("corPeriodStats").innerHTML = corStatsBlockHtml(_corTrials);
+  corRenderChart(_corTrials);
+  corPopulatePicker(_corTrials);
+}
+document.getElementById("corRangeFilter").addEventListener("change", coronetRefreshHistory);
+document.getElementById("corTrialPicker").addEventListener("change", e => corShowTrialDetail(e.target.value));
+
+sb.channel("coronet_live")
+  .on("postgres_changes", { event: "*", schema: "public", table: "coronet_trials" }, () => {
+    if (currentBot !== "coronet") return;
+    coronetRefreshLive();
+    if (currentTab === "history") coronetRefreshHistory();
+  })
+  .on("postgres_changes", { event: "*", schema: "public", table: "coronet_batches" }, () => {
+    if (currentBot === "coronet") coronetRefreshLive();
+  })
+  .subscribe();
 
 initBotUI();
 refreshLive();
