@@ -53,6 +53,14 @@
   .cor-breakdown-box.sockets { border-color: #1D9E75; } .cor-breakdown-box.sockets .cor-breakdown-value { color: #3ecf9a; }
   .cor-breakdown-box.amazon { border-color: #9C5FD8; } .cor-breakdown-box.amazon .cor-breakdown-value { color: #c39cf0; }
   .cor-breakdown-box.fwr { border-color: #E0A030; } .cor-breakdown-box.fwr .cor-breakdown-value { color: #f0c26a; }
+  .cor-group { border-radius: 12px; padding: 8px 12px 10px; margin-bottom: 12px; border: 1px solid; }
+  .cor-group .cor-group-title { font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+  .cor-group .cor-group-sub { font-size: 12px; margin-bottom: 8px; opacity: 0.9; }
+  .cor-group.gross { border-color: #b8742a; background: rgba(184,116,42,0.10); }
+  .cor-group.gross .cor-group-title, .cor-group.gross .cor-group-sub { color: #e0a060; }
+  .cor-group.net { border-color: #3e9a6a; background: rgba(62,154,106,0.10); }
+  .cor-group.net .cor-group-title, .cor-group.net .cor-group-sub { color: #6fcf9a; }
+  .cor-group .cor-stat-row { margin-bottom: 0; }
   .cor-chip { display: inline-block; border-radius: 6px; padding: 1px 7px; margin-right: 4px; font-size: 12px; border: 1px solid #4a3a24; }
   .cor-chip.fcr { border-color: #378ADD; color: #6fb3f0; } .cor-chip.sockets { border-color: #1D9E75; color: #3ecf9a; }
   .cor-chip.amazon { border-color: #9C5FD8; color: #c39cf0; } .cor-chip.fwr { border-color: #E0A030; color: #f0c26a; }
@@ -2224,15 +2232,27 @@ function corStatsBlockHtml(rows, opts = {}) {
     `<div class="cor-stat-box"${title ? ` title="${title}"` : ""}><div class="cor-stat-label">${label}</div><div class="cor-stat-value">${value}</div></div>`;
   const countBox = opts.batchCount !== undefined
     ? box("Batches", opts.batchCount) : box("Trials", rows.length);
-  return `<div class="cor-stat-row">
-      ${box("Total Gold Spent", goldSpent.toLocaleString())}
+  return `<div class="cor-group gross">
+      <div class="cor-group-title">Gross cost — all gold paid</div>
+      <div class="cor-group-sub">Counts every coronet bought; the gold you got back from selling the non-keepers is NOT deducted.</div>
+      <div class="cor-stat-row">
+        ${box("Total Gold Spent", goldSpent.toLocaleString())}
+        ${box("Avg Gold per Keeper", goldPer(kept), "Total gold spent ÷ coronets kept (gross, before sell proceeds)")}
+        ${box("Avg Price per Coronet", goldPer(bought), "Total gold spent ÷ coronets bought")}
+      </div>
+    </div>
+    <div class="cor-group net">
+      <div class="cor-group-title">Net cost — after selling back</div>
+      <div class="cor-group-sub">Gross cost with the gold received from sold coronets deducted (${netNote}).</div>
+      <div class="cor-stat-row">
+        ${box("Net Gold Spent", approx + netSpent.toLocaleString(), `Gross gold spent minus gold from selling the non-keepers back. ${netNote}`)}
+        ${box("Net Gold per Keeper", netPer(kept), `Net gold spent ÷ coronets kept. ${netNote}`)}
+        ${box("Net Price per Coronet", netPer(bought), `Net gold spent ÷ coronets bought. ${netNote}`)}
+      </div>
+    </div>
+    <div class="cor-stat-row">
       ${box("Total Coronets Bought", bought.toLocaleString())}
-      ${box("Avg Gold per Keeper", goldPer(kept), "Total gold spent ÷ coronets kept (gross, before sell proceeds)")}
-      ${box("Avg Price per Coronet", goldPer(bought), "Total gold spent ÷ coronets bought")}
       ${box("Avg Bought per Keeper", perKeep(kept), "Coronets bought on average to get one worth keeping (bought ÷ kept)")}
-      ${box("Net Gold Spent", approx + netSpent.toLocaleString(), `Gross gold spent minus gold from selling the non-keepers back. ${netNote}`)}
-      ${box("Net Gold per Keeper", netPer(kept), `Net gold spent ÷ coronets kept. ${netNote}`)}
-      ${box("Net Price per Coronet", netPer(bought), `Net gold spent ÷ coronets bought. ${netNote}`)}
       ${box("Avg Gold per Sold Coronet", avgSale, `Gold received per non-keeper coronet sold back. Measured trials only (${measuredRows} of ${rows.length}); older trials have no sale data.`)}
       ${box("Refresh Clicked", refreshClicks.toLocaleString())}
       ${countBox}
