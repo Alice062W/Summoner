@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8da2b8"/><stop offset="1" stop-color="#3d4c5e"/></linearGradient>
+    <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a3a2e"/><stop offset="1" stop-color="#241a12"/></linearGradient>
+    <linearGradient id="gold2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#c9921a"/></linearGradient>
+  </defs>
+  <!-- chest body -->
+  <rect x="8" y="30" width="48" height="26" rx="3" fill="url(#dark)" stroke="#12100c" stroke-width="1.5"/>
+  <path d="M8 31 Q8 13 32 13 Q56 13 56 31 Z" fill="url(#dark)" stroke="#12100c" stroke-width="1.5"/>
+  <!-- steel bands -->
+  <rect x="8" y="28" width="48" height="5" fill="url(#steel)" stroke="#27323f" stroke-width="1"/>
+  <rect x="17" y="14" width="5" height="42" fill="url(#steel)" stroke="#27323f" stroke-width="1"/>
+  <rect x="42" y="14" width="5" height="42" fill="url(#steel)" stroke="#27323f" stroke-width="1"/>
+  <!-- padlock -->
+  <path d="M27.5 36 V32 a4.5 4.5 0 0 1 9 0 V36" fill="none" stroke="#c8d3de" stroke-width="2.2"/>
+  <rect x="25" y="36" width="14" height="11" rx="2" fill="url(#gold2)" stroke="#8a6410" stroke-width="1"/>
+  <circle cx="32" cy="40.5" r="1.8" fill="#3a2a10"/>
+  <rect x="31.2" y="41" width="1.6" height="4" fill="#3a2a10"/>
+  <!-- gold coin glint on top -->
+  <circle cx="50" cy="12" r="6" fill="url(#gold2)" stroke="#8a6410" stroke-width="1"/>
+  <text x="50" y="15" font-family="serif" font-size="8" font-weight="700" text-anchor="middle" fill="#7a5410">G</text>
+</svg>

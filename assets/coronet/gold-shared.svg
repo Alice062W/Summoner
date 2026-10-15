@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a5a2b"/><stop offset="1" stop-color="#4a2e14"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#c9921a"/></linearGradient>
+  </defs>
+  <!-- spilled coins -->
+  <ellipse cx="14" cy="55" rx="9" ry="3.2" fill="url(#gold)" stroke="#8a6410" stroke-width="1"/>
+  <ellipse cx="14" cy="52.5" rx="9" ry="3.2" fill="url(#gold)" stroke="#8a6410" stroke-width="1"/>
+  <ellipse cx="52" cy="55" rx="8" ry="3" fill="url(#gold)" stroke="#8a6410" stroke-width="1"/>
+  <!-- chest body -->
+  <rect x="8" y="30" width="48" height="24" rx="3" fill="url(#wood)" stroke="#2a1a0a" stroke-width="1.5"/>
+  <!-- lid -->
+  <path d="M8 31 Q8 12 32 12 Q56 12 56 31 Z" fill="url(#wood)" stroke="#2a1a0a" stroke-width="1.5"/>
+  <!-- gold bands -->
+  <rect x="8" y="28" width="48" height="5" fill="url(#gold)" stroke="#8a6410" stroke-width="1"/>
+  <rect x="17" y="13" width="5" height="41" fill="url(#gold)" stroke="#8a6410" stroke-width="1"/>
+  <rect x="42" y="13" width="5" height="41" fill="url(#gold)" stroke="#8a6410" stroke-width="1"/>
+  <!-- lock -->
+  <rect x="28" y="28" width="8" height="10" rx="1.5" fill="url(#gold)" stroke="#8a6410" stroke-width="1"/>
+  <circle cx="32" cy="33" r="1.5" fill="#4a2e14"/>
+  <!-- shared marker: little globe-ish ring above the lid -->
+  <circle cx="32" cy="7" r="4.5" fill="none" stroke="#8fd0ff" stroke-width="1.6"/>
+  <path d="M27.5 7 H36.5 M32 2.5 Q29.5 7 32 11.5 M32 2.5 Q34.5 7 32 11.5" fill="none" stroke="#8fd0ff" stroke-width="1"/>
+</svg>

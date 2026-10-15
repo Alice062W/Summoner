@@ -81,6 +81,16 @@
   .cor-kept-box.sockets { border-color: #1D9E75; } .cor-kept-box.sockets .cor-kept-value { color: #3ecf9a; }
   .cor-kept-box.amazon { border-color: #9C5FD8; } .cor-kept-box.amazon .cor-kept-value { color: #c39cf0; }
   .cor-kept-box.fwr { border-color: #E0A030; } .cor-kept-box.fwr .cor-kept-value { color: #f0c26a; }
+  .cor-group.gold { border-color: #c9a227; background: rgba(201,162,39,0.06); }
+  .cor-group.gold .cor-group-title { color: #f0d878; }
+  .cor-gold-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 600px) { .cor-gold-grid { grid-template-columns: 1fr; } }
+  .cor-gold-box { background: #2a2018; border: 1px solid #4a3a24; border-radius: 8px; padding: 10px 8px 8px; text-align: center; }
+  .cor-gold-box img { height: 52px; width: 52px; object-fit: contain; display: block; margin: 0 auto 4px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+  .cor-gold-box .cor-gold-label { font-size: 12px; color: #a8916a; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 2px; }
+  .cor-gold-box .cor-gold-value { font-size: 26px; font-weight: 700; margin: 0; color: #ffce54; text-shadow: 0 0 8px rgba(255,206,84,0.35); font-family: 'Cinzel', serif; line-height: 1.15; }
+  .cor-gold-box .cor-age { font-size: 11px; color: #a8916a; margin-top: 3px; }
+  .cor-gold-box .cor-age.old { color: #d88a5a; }
   .cor-chip { display: inline-block; border-radius: 6px; padding: 1px 7px; margin-right: 4px; font-size: 12px; border: 1px solid #4a3a24; }
   .cor-chip.fcr { border-color: #378ADD; color: #6fb3f0; } .cor-chip.sockets { border-color: #1D9E75; color: #3ecf9a; }
   .cor-chip.amazon { border-color: #9C5FD8; color: #c39cf0; } .cor-chip.fwr { border-color: #E0A030; color: #f0c26a; }
@@ -376,6 +386,7 @@
 
 <div id="coronetLivePanel" style="display:none;">
   <div id="corLiveKept"></div>
+  <div id="corLiveGold"></div>
   <div class="panel">
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
       <strong><span class="status-dot red" id="corLiveDot"></span><span id="corLiveLabel">Live Trial</span></strong>
@@ -2410,6 +2421,43 @@ function corRunRowsHtml(runs, isRunning) {
 }
 const COR_RUN_HEAD = `<tr><th>run</th><th>batches</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>ended</th></tr>`;
 
+// Latest gold readings (coronet_gold row, id=1). The three numbers are read at
+// different moments, so each box carries its own "read Xs ago" label, ticked
+// once a second by corTickAges().
+function corAgeText(iso) {
+  if (!iso) return "no reading yet";
+  const sec = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000));
+  if (sec < 60) return `read ${sec}s ago`;
+  if (sec < 3600) return `read ${Math.floor(sec / 60)} min${Math.floor(sec / 60) === 1 ? "" : "s"} ago`;
+  if (sec < 86400) return `read ${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m ago`;
+  return `read ${Math.floor(sec / 86400)}d ago`;
+}
+function corTickAges() {
+  document.querySelectorAll(".cor-age[data-ts]").forEach(el => {
+    const ts = el.getAttribute("data-ts");
+    el.textContent = corAgeText(ts);
+    el.classList.toggle("old", !!ts && Date.now() - new Date(ts) > 10 * 60 * 1000);
+  });
+}
+setInterval(corTickAges, 1000);
+
+function corGoldHtml(g) {
+  g = g || {};
+  const box = (icon, label, val, ts) =>
+    `<div class="cor-gold-box"><img src="assets/coronet/${icon}" alt=""><p class="cor-gold-label">${label}</p>` +
+    `<p class="cor-gold-value">${val !== null && val !== undefined ? Number(val).toLocaleString() : "—"}</p>` +
+    `<div class="cor-age" data-ts="${ts || ""}">${corAgeText(ts)}</div></div>`;
+  return `<div class="cor-group gold">
+      <div class="cor-group-title">💰 Gold</div>
+      <div class="cor-group-sub">Latest in-game readings — each box is read at a different moment, so check its own timestamp.</div>
+      <div class="cor-gold-grid">
+        ${box("gold-shared.svg", "Shared Stash", g.shared_gold, g.shared_read_at)}
+        ${box("gold-personal.svg", "Personal Stash", g.personal_gold, g.personal_read_at)}
+        ${box("gold-inventory.svg", "Inventory Bag", g.inventory_gold, g.inventory_read_at)}
+      </div>
+    </div>`;
+}
+
 async function corLoadBatches(trialId) {
   return fetchAllPages("coronet_batches", q =>
     q.eq("trial_id", trialId).order("batch_no", { ascending: false }));
@@ -2422,6 +2470,8 @@ async function coronetRefreshLive() {
   const showAll = !!trial;
   document.getElementById("corLiveEmpty").style.display = showAll ? "none" : "";
   if (!showAll) document.getElementById("corLiveKept").innerHTML = "";
+  const goldRes = await sb.from("coronet_gold").select("*").eq("id", 1).maybeSingle();
+  document.getElementById("corLiveGold").innerHTML = corGoldHtml(goldRes && goldRes.data);
   document.getElementById("corLiveSummaryPanel").style.display = showAll ? "" : "none";
   document.getElementById("corLiveBatchPanel").style.display = showAll ? "" : "none";
   document.getElementById("corLiveRunPanel").style.display = showAll ? "" : "none";
@@ -2538,6 +2588,9 @@ sb.channel("coronet_live")
     if (currentTab === "history") coronetRefreshHistory();
   })
   .on("postgres_changes", { event: "*", schema: "public", table: "coronet_batches" }, () => {
+    if (currentBot === "coronet") coronetRefreshLive();
+  })
+  .on("postgres_changes", { event: "*", schema: "public", table: "coronet_gold" }, () => {
     if (currentBot === "coronet") coronetRefreshLive();
   })
   .subscribe();
