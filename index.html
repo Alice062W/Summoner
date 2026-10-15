@@ -389,10 +389,17 @@
   <div class="panel" id="corLiveSummaryPanel">
     <div id="corLiveSummary"></div>
   </div>
+  <div class="panel" id="corLiveRunPanel">
+    <h3 style="margin:0 0 10px;">Runs (stash withdraw → betting → optional deposit; newest first)</h3>
+    <table class="run-table">
+      <thead id="corLiveRunHead"></thead>
+      <tbody id="corLiveRunBody"></tbody>
+    </table>
+  </div>
   <div class="panel" id="corLiveBatchPanel">
     <h3 style="margin:0 0 10px;">Batches (this trial, newest first)</h3>
     <table class="run-table">
-      <thead><tr><th>batch</th><th>status</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>when</th></tr></thead>
+      <thead><tr><th>run</th><th>batch</th><th>status</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>when</th></tr></thead>
       <tbody id="corLiveBatchBody"></tbody>
     </table>
     <div id="corLiveBatchEmpty" class="empty-state" style="display:none;">No batches finished yet.</div>
@@ -2340,6 +2347,7 @@ function corBatchRowsHtml(batches) {
     const net = hasSold ? (b.gold_spent - b.gold_sold).toLocaleString() : "?";
     const keeper = (b.kept || 0) > 0;
     return `<tr class="${keeper ? "key-row" : ""}">
+      <td data-label="run">${b.run_no || "?"}</td>
       <td data-label="batch">${b.batch_no}</td>
       <td data-label="status">${COR_STATUS_LABEL[b.status] || b.status || "-"}</td>
       <td data-label="bought">${b.bought}</td>
@@ -2355,6 +2363,53 @@ function corBatchRowsHtml(batches) {
   }).join("");
 }
 
+// Batches (newest-first) -> runs (newest-first). A run = one stash-withdraw
+// trip to Anya; batches pushed before run_no existed all land in run "?".
+function corGroupRuns(batches) {
+  const m = new Map();
+  [...batches].reverse().forEach(b => {
+    const k = b.run_no || 0;
+    if (!m.has(k)) m.set(k, { run_no: k, batches: [] });
+    m.get(k).batches.push(b);
+  });
+  return [...m.values()].reverse();
+}
+
+function corRunRowsHtml(runs, isRunning) {
+  return runs.map((r, i) => {
+    const bs = r.batches;   // oldest-first
+    const sum = f => bs.reduce((s, b) => s + (b[f] || 0), 0);
+    const allSold = bs.every(b => b.gold_sold !== null && b.gold_sold !== undefined);
+    const spent = sum("gold_spent"), sold = sum("gold_sold");
+    const first = bs[0], last = bs[bs.length - 1];
+    const startMs = new Date(first.finished_at) - (first.duration_s || 0) * 1000;
+    const tookSec = (new Date(last.finished_at) - startMs) / 1000;
+    const kept = sum("kept");
+    const chips = corKeptChips({
+      kept_fcr_skill: sum("kept_fcr_skill"), kept_3sockets: sum("kept_3sockets"),
+      kept_amazon_llm: sum("kept_amazon_llm"), kept_fwr: sum("kept_fwr") });
+    let end = "-";
+    if (i === 0 && isRunning) end = "running";
+    else if (kept > 0) end = "banked keepers";
+    else if (last.status === "low_gold") end = "low gold → refill";
+    else if (last.status === "aborted") end = "aborted";
+    return `<tr class="${kept > 0 ? "key-row" : ""}">
+      <td data-label="run">${r.run_no || "?"}</td>
+      <td data-label="batches">${bs.length}</td>
+      <td data-label="bought">${sum("bought")}</td>
+      <td data-label="kept">${kept > 0 ? "⭐ " : ""}${chips}</td>
+      <td data-label="sold">${sum("sold")}</td>
+      <td data-label="gold spent">${spent.toLocaleString()}</td>
+      <td data-label="sold for">${allSold ? sold.toLocaleString() : "?"}</td>
+      <td data-label="net">${allSold ? (spent - sold).toLocaleString() : "?"}</td>
+      <td data-label="refresh">${sum("refresh_clicks")}</td>
+      <td data-label="took">${corFmtDur(tookSec)}</td>
+      <td data-label="ended">${end}</td>
+    </tr>`;
+  }).join("");
+}
+const COR_RUN_HEAD = `<tr><th>run</th><th>batches</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>ended</th></tr>`;
+
 async function corLoadBatches(trialId) {
   return fetchAllPages("coronet_batches", q =>
     q.eq("trial_id", trialId).order("batch_no", { ascending: false }));
@@ -2369,6 +2424,7 @@ async function coronetRefreshLive() {
   if (!showAll) document.getElementById("corLiveKept").innerHTML = "";
   document.getElementById("corLiveSummaryPanel").style.display = showAll ? "" : "none";
   document.getElementById("corLiveBatchPanel").style.display = showAll ? "" : "none";
+  document.getElementById("corLiveRunPanel").style.display = showAll ? "" : "none";
   if (!trial) return;
   const batches = await corLoadBatches(trial.trial_id);
   // Open row + no activity for COR_STALE_MIN => the bot died without closing
@@ -2392,7 +2448,10 @@ async function coronetRefreshLive() {
   const tSec = corTrialSec(trial), nBought = trial.coronets_bought || 0, nKept = trial.coronets_kept || 0;
   const per = (n) => n > 0 ? fmtSeconds(tSec / n) : "—";
   document.getElementById("corLiveLine").textContent =
-    `${batches.length} batches — ${nBought} coronets bought — avg ${per(nBought)}/coronet — avg ${per(nKept)}/kept coronet — total ${fmtSeconds(tSec)}`;
+    `${batches.length} batches — ${runs.length} runs — ${nBought} coronets bought — avg ${per(nBought)}/coronet — avg ${per(nKept)}/kept coronet — total ${fmtSeconds(tSec)}`;
+  const runs = corGroupRuns(batches);
+  document.getElementById("corLiveRunHead").innerHTML = COR_RUN_HEAD;
+  document.getElementById("corLiveRunBody").innerHTML = corRunRowsHtml(runs, isRunning);
   document.getElementById("corLiveBatchBody").innerHTML = corBatchRowsHtml(batches);
   document.getElementById("corLiveBatchEmpty").style.display = batches.length ? "none" : "";
   // Same cue as the Summoner/Warlock live pages ("Run N in progress…").
@@ -2445,14 +2504,17 @@ async function corShowTrialDetail(trialId) {
   if (!r) return;
   const batches = await corLoadBatches(trialId);
   const rule = r.strict_rule ? "Strict rule" : "General rule";
+  const runTable = batches.length
+    ? `<h4 style="margin:14px 0 4px;">Runs</h4><table class="run-table"><thead>${COR_RUN_HEAD}</thead><tbody>${corRunRowsHtml(corGroupRuns(batches), false)}</tbody></table><h4 style="margin:14px 0 4px;">Batches</h4>`
+    : "";
   const batchTable = batches.length
-    ? `<table class="run-table" style="margin-top:12px;">
-        <thead><tr><th>batch</th><th>status</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>when</th></tr></thead>
+    ? `<table class="run-table" style="margin-top:4px;">
+        <thead><tr><th>run</th><th>batch</th><th>status</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>when</th></tr></thead>
         <tbody>${corBatchRowsHtml(batches)}</tbody></table>`
     : `<div class="empty-state">No per-batch data for this trial (recorded before batch tracking existed).</div>`;
   el.innerHTML = `<p class="cor-meta"><strong>Started:</strong> ${new Date(r.started_at).toLocaleString()} &nbsp; <strong>Ended:</strong> ${r.ended_at ? new Date(r.ended_at).toLocaleString() : "(still running)"} &nbsp; ${rule}</p>
     <p class="cor-meta"><strong>Stop reason:</strong> ${r.stop_reason || "-"}</p>
-    ${corStatsBlockHtml([r], { batchCount: batches.length || undefined })}${batchTable}`;
+    ${corStatsBlockHtml([r], { batchCount: batches.length || undefined })}${runTable}${batchTable}`;
 }
 
 async function coronetRefreshHistory() {
