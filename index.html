@@ -2169,10 +2169,16 @@ const COR_EST_SALE_PRICE = 28700;   // avg gold per non-keeper sold back (451 cl
 const COR_STATUS_LABEL = { complete: "complete", low_gold: "low gold", aborted: "aborted" };
 
 function corSum(rows, f) { return rows.reduce((s, r) => s + (r[f] || 0), 0); }
+// A trial row that was never closed (power cut, killed process) would count
+// up to "now" forever and inflate every time total, so an open row older than
+// 24h is treated as zero-length (its real end is unknown).
 function corTrialSec(r) {
+  const start = new Date(r.started_at);
+  if (!r.ended_at && Date.now() - start > 24 * 3600 * 1000) return 0;
   const end = r.ended_at ? new Date(r.ended_at) : new Date();
-  return Math.max(0, (end - new Date(r.started_at)) / 1000);
+  return Math.max(0, (end - start) / 1000);
 }
+const COR_STALE_MIN = 60;   // open trial with no batch/start activity for this long = "probably stopped"
 function corFmtDur(sec) {
   sec = Math.max(0, Math.round(sec));
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
@@ -2287,15 +2293,21 @@ async function coronetRefreshLive() {
   document.getElementById("corLiveSummaryPanel").style.display = showAll ? "" : "none";
   document.getElementById("corLiveBatchPanel").style.display = showAll ? "" : "none";
   if (!trial) return;
-  const isRunning = !trial.ended_at;
+  const batches = await corLoadBatches(trial.trial_id);
+  // Open row + no activity for COR_STALE_MIN => the bot died without closing
+  // it; show red instead of a green light that never goes out.
+  const lastAct = new Date(batches.length ? batches[0].finished_at : trial.started_at);
+  const staleMin = (Date.now() - lastAct) / 60000;
+  const stale = !trial.ended_at && staleMin > COR_STALE_MIN;
+  const isRunning = !trial.ended_at && !stale;
   document.getElementById("corLiveDot").className = "status-dot " + (isRunning ? "green" : "red");
   document.getElementById("corLiveLabel").textContent =
     (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id;
   const rule = trial.strict_rule ? "Strict rule" : "General rule";
-  const stop = !isRunning && trial.stop_reason ? ` · stopped: ${trial.stop_reason}` : "";
+  const stop = trial.ended_at && trial.stop_reason ? ` · stopped: ${trial.stop_reason}` : "";
+  const staleNote = stale ? ` · no activity for ${corFmtDur(staleMin * 60)} — bot probably stopped without closing the trial` : "";
   document.getElementById("corLiveMeta").textContent =
-    `Started ${new Date(trial.started_at).toLocaleString()} · ${corFmtDur(corTrialSec(trial))} ${isRunning ? "elapsed" : "total"} · ${rule}${stop}`;
-  const batches = await corLoadBatches(trial.trial_id);
+    `Started ${new Date(trial.started_at).toLocaleString()} · ${corFmtDur(corTrialSec(trial))} ${isRunning ? "elapsed" : "total"} · ${rule}${stop}${staleNote}`;
   document.getElementById("corLiveSummary").innerHTML = corStatsBlockHtml([trial], { batchCount: batches.length });
   document.getElementById("corLiveBatchBody").innerHTML = corBatchRowsHtml(batches);
   document.getElementById("corLiveBatchEmpty").style.display = batches.length ? "none" : "";
