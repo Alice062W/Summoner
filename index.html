@@ -783,11 +783,19 @@ function stashGoldAgo(iso) {
   if (sec < 172800) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m ago`;
   return `${Math.floor(sec / 86400)}d ago`;
 }
+// Gold banked this trial (summoner_trials.gold_collected, stamped at the same
+// moment as the shared-stash reading) — set from refreshLive().
+let _summonerGoldTrial = null;
 function stashGoldHtml() {
   if (!_summonerStashGold || _summonerStashGold.gold === null || _summonerStashGold.gold === undefined) return "";
   const g = _summonerStashGold;
-  return ` · 💰 Shared stash ${Number(g.gold).toLocaleString()}` +
-    (g.ts ? ` <span class="stash-gold-age" data-ts="${g.ts}" style="color:#a8916a;">(read ${stashGoldAgo(g.ts)})</span>` : "");
+  let out = ` · 💰 Shared stash ${Number(g.gold).toLocaleString()}`;
+  const t = _summonerGoldTrial;
+  if (t && t.collectedAt) {
+    const hrs = Math.max((new Date(t.collectedAt) - new Date(t.startedAt)) / 3600000, 1 / 60);
+    out += ` · collected ${Number(t.collected || 0).toLocaleString()} (${Math.round((t.collected || 0) / hrs).toLocaleString()}/h)`;
+  }
+  return out + (g.ts ? ` <span class="stash-gold-age" data-ts="${g.ts}" style="color:#a8916a;">(read ${stashGoldAgo(g.ts)})</span>` : "");
 }
 function tickStashGoldAge() {
   document.querySelectorAll(".stash-gold-age[data-ts]").forEach(el => {
@@ -1982,6 +1990,7 @@ async function refreshLive() {
       renderWarlockRatioStats("liveRatios", runs, trial.merc_revivals, trial.gold_collected, elapsedHours);
     }
   } else {
+    _summonerGoldTrial = { collected: trial.gold_collected, collectedAt: trial.gold_collected_read_at, startedAt: trial.started_at };
     renderRatioStats("liveRatios", runs, trial.merc_revivals);
   }
   renderLootTally(runs, "liveLootTally");
