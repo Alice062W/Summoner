@@ -772,7 +772,34 @@ async function loadKeyCounts() {
   return data[0];
 }
 
+// Shared-stash gold as last read by the Summoner bot (key_counts.shared_gold,
+// stamped with shared_gold_read_at) — shown at the end of the Summoner live
+// ratio line, with a ticking "read X ago".
+let _summonerStashGold = null;
+function stashGoldAgo(iso) {
+  const sec = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000));
+  if (sec < 90) return `${sec}s ago`;
+  if (sec < 5400) return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 172800) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m ago`;
+  return `${Math.floor(sec / 86400)}d ago`;
+}
+function stashGoldHtml() {
+  if (!_summonerStashGold || _summonerStashGold.gold === null || _summonerStashGold.gold === undefined) return "";
+  const g = _summonerStashGold;
+  return ` · 💰 Shared stash ${Number(g.gold).toLocaleString()}` +
+    (g.ts ? ` <span class="stash-gold-age" data-ts="${g.ts}" style="color:#a8916a;">(read ${stashGoldAgo(g.ts)})</span>` : "");
+}
+function tickStashGoldAge() {
+  document.querySelectorAll(".stash-gold-age[data-ts]").forEach(el => {
+    el.textContent = `(read ${stashGoldAgo(el.getAttribute("data-ts"))})`;
+  });
+}
+setInterval(tickStashGoldAge, 1000);
+
 function renderKeyCounts(counts) {
+  _summonerStashGold = { gold: counts.shared_gold, ts: counts.shared_gold_read_at };
+  const goldSpan = document.getElementById("liveStashGoldSpan");
+  if (goldSpan) { goldSpan.innerHTML = stashGoldHtml(); }
   document.getElementById("keyTerror").textContent = counts.terror;
   document.getElementById("keyHate").textContent = counts.hate;
   document.getElementById("keyDestruction").textContent = counts.destruction;
@@ -1732,13 +1759,17 @@ function renderRatioStats(elId, runs, mercRevivals) {
   const stashFail = runs.filter(r => r.stash_result === "fail").length;
   const stashTotal = stashSuccess + stashFail;
   const connFailed = runs.filter(r => r.connection_failed).length;
-  document.getElementById(elId).textContent = total === 0 ? "" :
+  const ratioText = total === 0 ? "" :
     `✅ ${success}/${total} (${pct(success, total)}%) · ` +
     `❌ ${bossMiss}/${total} (${pct(bossMiss, total)}%) · ` +
     `🌀 ${portalFail}/${total} (${pct(portalFail, total)}%) · ` +
     `📥 ${stashSuccess}/${stashTotal} (${pct(stashSuccess, stashTotal)}%) · ` +
     `🧟 ${mercRevivals ?? 0}` +
     (connFailed > 0 ? ` · 🔌 ${connFailed}` : "");
+  // The same line also carries the shared-stash gold (+ "read X ago"); the
+  // number comes from key_counts, so it lives in its own span that
+  // renderKeyCounts() refreshes independently.
+  document.getElementById(elId).innerHTML = `${ratioText}<span id="liveStashGoldSpan">${stashGoldHtml()}</span>`;
 }
 
 // Warlock equivalent of renderRatioStats. `result` is a mutually exclusive,
