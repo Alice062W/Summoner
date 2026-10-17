@@ -1046,9 +1046,10 @@ function avgDurationLabel(runs) {
   return fmtSeconds(totalDur / runs.length);
 }
 
+// Runs per KEY (a run can drop two keys), not per key-dropping run.
 function avgRunsPerKeyLabel(runs) {
-  const keyRuns = runs.filter(r => (r.loots || []).some(l => l.is_key));
-  return keyRuns.length > 0 ? (runs.length / keyRuns.length).toFixed(1) : "-";
+  const keys = runs.reduce((s, r) => s + (r.loots || []).filter(l => l.is_key).length, 0);
+  return keys > 0 ? (runs.length / keys).toFixed(1) : "-";
 }
 
 function renderStats(runStats, trialCount, runs = []) {
@@ -1086,14 +1087,16 @@ function renderStats(runStats, trialCount, runs = []) {
       ? Object.entries(vc).sort((a, b) => b[1] - a[1]).map(([l, n]) => `${valuableLabel(l)} — ${n} run(s)`).join("\n")
       : "No valuable items kept in this period";
   } else {
-    const keyRunCount = Number(runStats.key_run_count) || 0;
+    // key_count (migration 0033) = keys dropped; falls back to key_run_count
+    // (runs that dropped a key) until that migration has been applied.
+    const keyRunCount = Number(runStats.key_count ?? runStats.key_run_count) || 0;
     document.getElementById("statRunsPerKey").textContent =
       keyRunCount > 0 ? (runCount / keyRunCount).toFixed(1) : "-";
     // Rates over total farming time in the selected period (avg duration *
     // run count = exact sum of run durations, same derivation as Warlock's
-    // Total Time Spent). Keys/hr uses key_run_count (runs that dropped a
-    // key; a run virtually never drops more than one) since it's the exact
-    // server-side figure -- unaffected by loadRuns()'s 1000-row cap.
+    // Total Time Spent). Keys/hr uses the server-side key count (every key,
+    // including a run that dropped two) -- exact and unaffected by
+    // loadRuns()'s 1000-row cap.
     const farmHours = ((Number(runStats.avg_duration_seconds) || 0) * runCount) / 3600;
     document.getElementById("statRunsPerHour").textContent =
       farmHours > 0 ? (runCount / farmHours).toFixed(1) : "-";
