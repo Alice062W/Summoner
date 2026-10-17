@@ -1590,6 +1590,21 @@ function stopReasonSuffix(trial) {
   return ` (stopped: ${STOP_REASON_LABELS[trial.stop_reason] || trial.stop_reason})`;
 }
 
+// Live-trial title, e.g. "Live Trial (#4) — 20261017_154846". The "#4" is the
+// trial's series number within the current Summoner supervisor session
+// (oldest = #1), known once renderSupervisorSession() has worked it out, so
+// this is re-rendered from there too.
+let _liveTitleState = null;
+let _sessionTrialNo = null;
+function renderLiveTrialTitle() {
+  const s = _liveTitleState;
+  if (!s) return;
+  const num = (currentBot === "summoner" && _sessionTrialNo)
+    ? ` (<span style="color:#4fc3a1; font-weight:700;">#${_sessionTrialNo}</span>)` : "";
+  document.getElementById("liveTrialLabel").innerHTML =
+    `${s.isRunning ? "Live Trial" : "Last Trial"}${num} — ${s.trial.trial_id}${stopReasonSuffix(s.trial)}`;
+}
+
 function timeAgo(iso) {
   const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
@@ -2004,8 +2019,8 @@ async function refreshLive() {
 
   const isRunning = !trial.ended_at;
   document.getElementById("liveStatusDot").className = "status-dot " + (isRunning ? "green" : "red");
-  document.getElementById("liveTrialLabel").textContent =
-    (isRunning ? "Live Trial — " : "Last Trial — ") + trial.trial_id + stopReasonSuffix(trial);
+  _liveTitleState = { isRunning, trial };
+  renderLiveTrialTitle();
 
   const runs = await loadRunsForTrial(trial.trial_id);
   renderTrialSummary("liveProgress", runs, trial.max_runs, trial);
@@ -2104,6 +2119,8 @@ async function renderSupervisorSession(currentTrial, currentRuns) {
       session.push(prev);
     }
     session.reverse();   // oldest → newest
+    _sessionTrialNo = session.length;   // newest trial's series number
+    renderLiveTrialTitle();
 
     const rows = [];
     for (const t of session) {
