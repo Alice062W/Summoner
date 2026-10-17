@@ -798,9 +798,11 @@ function stashGoldHtml() {
   return out + (g.ts ? ` <span class="stash-gold-age" data-ts="${g.ts}" style="color:#a8916a;">(read ${stashGoldAgo(g.ts)})</span>` : "");
 }
 // When the most recent Summoner run that picked up a key finished (any trial).
+// The filter value is passed as a JSON *string*: given a JS array, postgrest-js
+// builds a Postgres array literal ({...}) instead of jsonb, and the query errors.
 async function loadLastKeyTime() {
   const { data, error } = await sb.from("summoner_runs").select("ended_at")
-    .contains("loots", [{ is_key: true }]).order("ended_at", { ascending: false }).limit(1);
+    .contains("loots", '[{"is_key":true}]').order("ended_at", { ascending: false }).limit(1);
   if (error || !data || data.length === 0) return null;
   return data[0].ended_at;
 }
