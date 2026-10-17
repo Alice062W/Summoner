@@ -256,10 +256,13 @@
     <div class="key-counts-grid" id="sessionCards"></div>
     <p id="sessionStatsLine" style="margin:0 0 6px; font-size:13px; color:#a8916a;"></p>
     <div class="loot-tally" id="sessionLootTally"></div>
-    <table class="run-table" style="margin-top:12px;">
-      <thead><tr><th>trial</th><th>runs</th><th>time</th><th>gold</th><th>loot</th></tr></thead>
-      <tbody id="sessionTrialBody"></tbody>
-    </table>
+    <details id="sessionTrialsDetails" style="margin-top:12px;">
+      <summary style="cursor:pointer; font-size:13px; color:#a8916a;">Trials in this session <span id="sessionTrialCount"></span></summary>
+      <table class="run-table" style="margin-top:8px;">
+        <thead><tr><th>trial</th><th>runs</th><th>time</th><th>gold</th><th>loot</th></tr></thead>
+        <tbody id="sessionTrialBody"></tbody>
+      </table>
+    </details>
   </details>
 
   <div id="runeStatsPanel" class="panel" style="display:none;">
@@ -2189,6 +2192,7 @@ async function renderSupervisorSession(currentTrial, currentRuns) {
       `<td data-label="gold">${r.gold.toLocaleString()}</td><td data-label="loot">${lootText(r)}</td></tr>`
     ).reverse().join("");
 
+    document.getElementById("sessionTrialCount").textContent = `(${rows.length})`;
     const capped = recent.length >= SESSION_MAX_TRIALS && session.length === recent.length;
     document.getElementById("sessionSubtitle").textContent =
       `since ${new Date(session[0].started_at).toLocaleString()}` + (capped ? " (older trials not shown)" : "");
