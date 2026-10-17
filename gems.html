@@ -357,5 +357,31 @@ sb.channel("gem-merge-scan-history-updates")
   .subscribe();
 </script>
 
+
+<!-- Floating refresh button: for home-screen shortcuts / app-style windows that have no browser reload button. -->
+<button id="floatRefreshBtn" type="button" title="Refresh (fetch the latest version)" aria-label="Refresh"
+  style="position:fixed; right:16px; bottom:16px; z-index:9999; width:48px; height:48px; border-radius:50%;
+         border:1px solid #c9a227; background:#2a2018; color:#f0d878; font-size:24px; line-height:1;
+         cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.55); opacity:0.85; padding:0;">&#8635;</button>
+<script>
+(function () {
+  const btn = document.getElementById("floatRefreshBtn");
+  if (!btn) return;
+  // Tidy the cache-busting parameter off the address bar after a refresh.
+  try {
+    const u = new URL(location.href);
+    if (u.searchParams.has("r")) { u.searchParams.delete("r"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+  } catch (e) {}
+  btn.addEventListener("mouseenter", () => { btn.style.opacity = "1"; });
+  btn.addEventListener("mouseleave", () => { btn.style.opacity = "0.85"; });
+  btn.addEventListener("click", () => {
+    btn.style.transition = "transform 0.6s"; btn.style.transform = "rotate(360deg)";
+    // A plain reload can be answered from the cache; a new query string forces a fresh fetch.
+    const u = new URL(location.href);
+    u.searchParams.set("r", Date.now());
+    setTimeout(() => { location.href = u.toString(); }, 150);
+  });
+})();
+</script>
 </body>
 </html>
