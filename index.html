@@ -797,7 +797,18 @@ function stashGoldHtml() {
   }
   return out + (g.ts ? ` <span class="stash-gold-age" data-ts="${g.ts}" style="color:#a8916a;">(read ${stashGoldAgo(g.ts)})</span>` : "");
 }
+// When the most recent Summoner run that picked up a key finished (any trial).
+async function loadLastKeyTime() {
+  const { data, error } = await sb.from("summoner_runs").select("ended_at")
+    .contains("loots", [{ is_key: true }]).order("ended_at", { ascending: false }).limit(1);
+  if (error || !data || data.length === 0) return null;
+  return data[0].ended_at;
+}
+
 function tickStashGoldAge() {
+  document.querySelectorAll(".last-key-age[data-ts]").forEach(el => {
+    el.textContent = `🔑 last key ${stashGoldAgo(el.getAttribute("data-ts"))}`;
+  });
   document.querySelectorAll(".stash-gold-age[data-ts]").forEach(el => {
     el.textContent = `(read ${stashGoldAgo(el.getAttribute("data-ts"))})`;
   });
@@ -1978,7 +1989,16 @@ async function refreshLive() {
 
   const inProgressEl = document.getElementById("liveInProgress");
   if (isRunning && trial.max_runs && runs.length < trial.max_runs) {
-    inProgressEl.innerHTML = `Run <span class="current-run-highlight">${runs.length + 1}</span> in progress…`;
+    // Summoner only: how long ago the last key was collected (any trial), in a
+    // different colour; ticks once a second like the shared-stash age.
+    let lastKeyHtml = "";
+    if (currentBot === "summoner") {
+      const ts = await loadLastKeyTime();
+      if (ts) {
+        lastKeyHtml = ` · <span class="last-key-age" data-ts="${ts}" style="color:#4fc3a1;">🔑 last key ${stashGoldAgo(ts)}</span>`;
+      }
+    }
+    inProgressEl.innerHTML = `Run <span class="current-run-highlight">${runs.length + 1}</span> in progress…${lastKeyHtml}`;
   } else {
     inProgressEl.textContent = "";
   }
