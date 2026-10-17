@@ -251,6 +251,16 @@
     </details>
   </div>
 
+  <details id="sessionPanel" class="panel" style="display:none;" open>
+    <summary><strong>🧭 Supervisor session</strong> <span id="sessionSubtitle" style="font-size:12px; color:#a8916a;"></span></summary>
+    <div class="cards" id="sessionCards" style="margin:10px 0 0;"></div>
+    <div class="loot-tally" id="sessionLootTally"></div>
+    <table class="run-table" style="margin-top:12px;">
+      <thead><tr><th>trial</th><th>runs</th><th>time</th><th>keys</th><th>gold</th><th>loot</th></tr></thead>
+      <tbody id="sessionTrialBody"></tbody>
+    </table>
+  </details>
+
   <div id="runeStatsPanel" class="panel" style="display:none;">
     <div style="display:flex; align-items:center; justify-content:space-between;">
       <strong>🪨 Stash Runes (live — current stash totals)</strong>
@@ -670,6 +680,7 @@ function initBotUI() {
   document.getElementById("historyRuneStatsPanel").style.display = isWarlock ? "" : "none";
   document.getElementById("statChronicleCard").style.display = isWarlock ? "" : "none";
   document.getElementById("statTotalTimeCard").style.display = isWarlock ? "" : "none";
+  if (currentBot !== "summoner") document.getElementById("sessionPanel").style.display = "none";
   document.getElementById("statTotalKeysCard").style.display = isWarlock ? "none" : "";
   document.getElementById("statRunsPerHourCard").style.display = isWarlock ? "none" : "";
   document.getElementById("statKeysPerHourCard").style.display = isWarlock ? "none" : "";
@@ -2026,10 +2037,136 @@ async function refreshLive() {
   }
   renderLootTally(runs, "liveLootTally");
   renderKeyHateBadge(runs);
+  renderSupervisorSession(trial, runs).catch(e => console.warn("session box:", e));
   if (currentBot === "warlock") {
     renderWarlockRunFeed("liveFeedBody", runs, "liveDetail");
   } else {
     renderRunFeed("liveFeedBody", runs, "liveDetail");
+  }
+}
+
+// ── Summoner supervisor session box (Live tab) ─────────────────────────────
+// The supervisor chains recovery trials (restart ~8 s after a recoverable
+// stop) but trials carry no session id, so a session is inferred: walk back
+// from the newest trial while the previous trial ended <= SESSION_GAP_MS
+// before the next one started and wasn't stopped by the user / completed.
+const SESSION_GAP_MS = 120000;
+const SESSION_MAX_TRIALS = 40;
+const _sessionRunsCache = {};   // finished trial_id -> its runs (immutable once finished)
+
+async function fetchSessionRuns(trialId) {
+  let all = [], from = 0;
+  while (true) {
+    const { data, error } = await sb.from("summoner_runs")
+      .select("trial_id,run_num,started_at,ended_at,loots")
+      .eq("trial_id", trialId).order("run_num", { ascending: true })
+      .range(from, from + 999);
+    if (error) return null;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  return all;
+}
+
+function lootCountsByGroup(runs) {
+  const allKeys = runs.flatMap(r => (r.loots || []).map(l => l.key || l.label));
+  const out = {};
+  LOOT_GROUPS.forEach(([group, keys]) => {
+    const n = allKeys.filter(k => keys.includes(k)).length;
+    if (n > 0) out[group] = n;
+  });
+  return out;
+}
+
+function keyCountOf(runs) {
+  return runs.reduce((s, r) => s + (r.loots || []).filter(l => l.is_key).length, 0);
+}
+
+let _sessionRenderBusy = false;
+async function renderSupervisorSession(currentTrial, currentRuns) {
+  const panel = document.getElementById("sessionPanel");
+  if (currentBot !== "summoner") { panel.style.display = "none"; return; }
+  if (_sessionRenderBusy) return;
+  _sessionRenderBusy = true;
+  try {
+    const { data: recent, error } = await sb.from("summoner_trials").select("*")
+      .order("started_at", { ascending: false }).limit(SESSION_MAX_TRIALS);
+    if (error || !recent || recent.length === 0) { panel.style.display = "none"; return; }
+
+    const session = [recent[0]];
+    for (let i = 1; i < recent.length; i++) {
+      const prev = recent[i], cur = session[session.length - 1];
+      if (!prev.ended_at) break;
+      if (new Date(cur.started_at) - new Date(prev.ended_at) > SESSION_GAP_MS) break;
+      if (prev.stop_reason === "user_stopped" || prev.stop_reason === "completed") break;
+      session.push(prev);
+    }
+    session.reverse();   // oldest → newest
+
+    const rows = [];
+    for (const t of session) {
+      let runs;
+      if (t.trial_id === currentTrial.trial_id) {
+        runs = currentRuns;
+      } else if (_sessionRunsCache[t.trial_id]) {
+        runs = _sessionRunsCache[t.trial_id];
+      } else {
+        runs = await fetchSessionRuns(t.trial_id);
+        if (runs === null) continue;
+        if (t.ended_at) _sessionRunsCache[t.trial_id] = runs;
+      }
+      const end = t.ended_at ? new Date(t.ended_at) : new Date();
+      rows.push({
+        t, runs,
+        sec: Math.max(0, (end - new Date(t.started_at)) / 1000),
+        keys: keyCountOf(runs),
+        gold: Number(t.gold_collected) || 0,
+        loot: lootCountsByGroup(runs),
+      });
+    }
+
+    const allRuns = rows.flatMap(r => r.runs);
+    const totalRuns = allRuns.length;
+    const totalKeys = rows.reduce((s, r) => s + r.keys, 0);
+    const totalGold = rows.reduce((s, r) => s + r.gold, 0);
+    const totalSec = rows.reduce((s, r) => s + r.sec, 0);
+    const hrs = totalSec / 3600;
+    const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "-");
+    const card = (label, val) => `<div class="card"><p>${label}</p><p>${val}</p></div>`;
+    document.getElementById("sessionCards").innerHTML = [
+      card("Trials", rows.length),
+      card("Total runs", totalRuns),
+      card("🔑 Keys", totalKeys),
+      card("💰 Gold", totalGold.toLocaleString()),
+      card("Total time", fmtSeconds(totalSec)),
+      card("Runs / key", totalKeys > 0 ? fmt(totalRuns / totalKeys) : "-"),
+      card("Time / key", totalKeys > 0 ? fmtSeconds(totalSec / totalKeys) : "-"),
+      card("Runs / hour", hrs > 0 ? fmt(totalRuns / hrs) : "-"),
+      card("Gold / hour", hrs > 0 ? Math.round(totalGold / hrs).toLocaleString() : "-"),
+    ].join("");
+    renderLootTally(allRuns, "sessionLootTally");
+
+    const trialLabel = r => {
+      const live = !r.t.ended_at;
+      const why = live ? "🟢 live" : (r.t.stop_reason ? r.t.stop_reason.replace(/_/g, " ") : "ended");
+      return `${r.t.trial_id}<br><span style="font-size:11px; color:#a8916a;">${why}</span>`;
+    };
+    const lootText = r => {
+      const parts = Object.entries(r.loot).map(([g, n]) => `${LOOT_ICONS[g] || ""}${n}`);
+      return parts.length ? parts.join(" ") : "-";
+    };
+    document.getElementById("sessionTrialBody").innerHTML = rows.map(r =>
+      `<tr><td>${trialLabel(r)}</td><td>${r.runs.length}</td><td>${fmtSeconds(r.sec)}</td>` +
+      `<td>${r.keys}</td><td>${r.gold.toLocaleString()}</td><td>${lootText(r)}</td></tr>`
+    ).join("");
+
+    const capped = recent.length >= SESSION_MAX_TRIALS && session.length === recent.length;
+    document.getElementById("sessionSubtitle").textContent =
+      `since ${new Date(session[0].started_at).toLocaleString()}` + (capped ? " (older trials not shown)" : "");
+    panel.style.display = "";
+  } finally {
+    _sessionRenderBusy = false;
   }
 }
 
