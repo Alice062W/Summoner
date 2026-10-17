@@ -253,7 +253,7 @@
 
   <details id="sessionPanel" class="panel" style="display:none;" open>
     <summary><strong>🧭 Supervisor session</strong> <span id="sessionSubtitle" style="font-size:12px; color:#a8916a;"></span></summary>
-    <div class="cards" id="sessionCards" style="margin:10px 0 0;"></div>
+    <div class="key-counts-grid" id="sessionCards"></div>
     <p id="sessionStatsLine" style="margin:0 0 6px; font-size:13px; color:#a8916a;"></p>
     <div class="loot-tally" id="sessionLootTally"></div>
     <table class="run-table" style="margin-top:12px;">
@@ -2134,7 +2134,8 @@ async function renderSupervisorSession(currentTrial, currentRuns) {
     const totalSec = rows.reduce((s, r) => s + r.sec, 0);
     const hrs = totalSec / 3600;
     const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "-");
-    const card = (label, val) => `<div class="card"><p>${label}</p><p>${val}</p></div>`;
+    // Same 3-across box style as the Stash Keys boxes (stays 3 in a row on a phone).
+    const card = (label, val) => `<div class="key-count-box"><p>${label}</p><p>${val}</p></div>`;
     document.getElementById("sessionCards").innerHTML = [
       card("Trials", rows.length),
       card("Total runs", totalRuns),
@@ -2165,8 +2166,9 @@ async function renderSupervisorSession(currentTrial, currentRuns) {
       return parts.length ? parts.join(" ") : "-";
     };
     document.getElementById("sessionTrialBody").innerHTML = rows.map((r, i) =>
-      `<tr><td>${trialLabel(r, i + 1)}</td><td>${r.runs.length}</td><td>${fmtSeconds(r.sec)}</td>` +
-      `<td>${r.gold.toLocaleString()}</td><td>${lootText(r)}</td></tr>`
+      `<tr><td data-label="trial">${trialLabel(r, i + 1)}</td><td data-label="runs">${r.runs.length}</td>` +
+      `<td data-label="time">${fmtSeconds(r.sec)}</td>` +
+      `<td data-label="gold">${r.gold.toLocaleString()}</td><td data-label="loot">${lootText(r)}</td></tr>`
     ).reverse().join("");
 
     const capped = recent.length >= SESSION_MAX_TRIALS && session.length === recent.length;
