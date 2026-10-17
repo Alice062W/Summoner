@@ -252,7 +252,7 @@
   </div>
 
   <details id="sessionPanel" class="panel" style="display:none;" open>
-    <summary><strong>🧭 Supervisor session</strong> <span id="sessionSubtitle" style="font-size:12px; color:#a8916a;"></span></summary>
+    <summary><strong>🧭 Supervisor session</strong> <span id="sessionKeysTitle" style="color:#ffce54; font-weight:700;"></span> <span id="sessionSubtitle" style="font-size:12px; color:#a8916a;"></span></summary>
     <div class="key-counts-grid" id="sessionCards"></div>
     <p id="sessionStatsLine" style="margin:0 0 6px; font-size:13px; color:#a8916a;"></p>
     <div class="loot-tally" id="sessionLootTally"></div>
@@ -2139,8 +2139,9 @@ async function renderSupervisorSession(currentTrial, currentRuns) {
     document.getElementById("sessionCards").innerHTML = [
       card("Trials", rows.length),
       card("Total runs", totalRuns),
-      card("🔑 Keys", totalKeys),
+      card("🔑 Keys", `+${totalKeys}`),   // collected this session, not the stash total
     ].join("");
+    document.getElementById("sessionKeysTitle").textContent = `(+${totalKeys} 🔑)`;
     const parts = [
       `avg ${totalRuns > 0 ? fmtSeconds(totalSec / totalRuns) : "-"}/run`,
       `avg ${totalKeys > 0 ? fmt(totalRuns / totalKeys) : "-"} runs/key`,
