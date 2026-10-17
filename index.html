@@ -256,7 +256,7 @@
     <div class="cards" id="sessionCards" style="margin:10px 0 0;"></div>
     <div class="loot-tally" id="sessionLootTally"></div>
     <table class="run-table" style="margin-top:12px;">
-      <thead><tr><th>trial</th><th>runs</th><th>time</th><th>keys</th><th>gold</th><th>loot</th></tr></thead>
+      <thead><tr><th>trial</th><th>runs</th><th>time</th><th>gold</th><th>loot</th></tr></thead>
       <tbody id="sessionTrialBody"></tbody>
     </table>
   </details>
@@ -2147,19 +2147,21 @@ async function renderSupervisorSession(currentTrial, currentRuns) {
     ].join("");
     renderLootTally(allRuns, "sessionLootTally");
 
-    const trialLabel = r => {
+    // rows is oldest → newest, so a row's series number is its index + 1
+    // (oldest = #1); the table below shows newest first.
+    const trialLabel = (r, n) => {
       const live = !r.t.ended_at;
       const why = live ? "🟢 live" : (r.t.stop_reason ? r.t.stop_reason.replace(/_/g, " ") : "ended");
-      return `${r.t.trial_id}<br><span style="font-size:11px; color:#a8916a;">${why}</span>`;
+      return `<strong>#${n}</strong> ${r.t.trial_id}<br><span style="font-size:11px; color:#a8916a;">${why}</span>`;
     };
     const lootText = r => {
       const parts = Object.entries(r.loot).map(([g, n]) => `${LOOT_ICONS[g] || ""}${n}`);
       return parts.length ? parts.join(" ") : "-";
     };
-    document.getElementById("sessionTrialBody").innerHTML = rows.map(r =>
-      `<tr><td>${trialLabel(r)}</td><td>${r.runs.length}</td><td>${fmtSeconds(r.sec)}</td>` +
-      `<td>${r.keys}</td><td>${r.gold.toLocaleString()}</td><td>${lootText(r)}</td></tr>`
-    ).join("");
+    document.getElementById("sessionTrialBody").innerHTML = rows.map((r, i) =>
+      `<tr><td>${trialLabel(r, i + 1)}</td><td>${r.runs.length}</td><td>${fmtSeconds(r.sec)}</td>` +
+      `<td>${r.gold.toLocaleString()}</td><td>${lootText(r)}</td></tr>`
+    ).reverse().join("");
 
     const capped = recent.length >= SESSION_MAX_TRIALS && session.length === recent.length;
     document.getElementById("sessionSubtitle").textContent =
