@@ -800,16 +800,22 @@ function stashGoldHtml() {
 // When the most recent Summoner run that picked up a key finished (any trial).
 // The filter value is passed as a JSON *string*: given a JS array, postgrest-js
 // builds a Postgres array literal ({...}) instead of jsonb, and the query errors.
+// Returns {ended_at, run_num} (run_num is that run's number within its own trial).
 async function loadLastKeyTime() {
-  const { data, error } = await sb.from("summoner_runs").select("ended_at")
+  const { data, error } = await sb.from("summoner_runs").select("ended_at, run_num")
     .contains("loots", '[{"is_key":true}]').order("ended_at", { ascending: false }).limit(1);
   if (error || !data || data.length === 0) return null;
-  return data[0].ended_at;
+  return data[0];
+}
+
+function lastKeyLabel(runNum, ts) {
+  const run = runNum ? ` (run #${runNum})` : "";
+  return `🔑 last key${run} ${stashGoldAgo(ts)}`;
 }
 
 function tickStashGoldAge() {
   document.querySelectorAll(".last-key-age[data-ts]").forEach(el => {
-    el.textContent = `🔑 last key ${stashGoldAgo(el.getAttribute("data-ts"))}`;
+    el.textContent = lastKeyLabel(el.getAttribute("data-run"), el.getAttribute("data-ts"));
   });
   document.querySelectorAll(".stash-gold-age[data-ts]").forEach(el => {
     el.textContent = `(read ${stashGoldAgo(el.getAttribute("data-ts"))})`;
@@ -1998,9 +2004,9 @@ async function refreshLive() {
     // different colour; ticks once a second like the shared-stash age.
     let lastKeyHtml = "";
     if (currentBot === "summoner") {
-      const ts = await loadLastKeyTime();
-      if (ts) {
-        lastKeyHtml = ` · <span class="last-key-age" data-ts="${ts}" style="color:#4fc3a1;">🔑 last key ${stashGoldAgo(ts)}</span>`;
+      const lk = await loadLastKeyTime();
+      if (lk) {
+        lastKeyHtml = ` · <span class="last-key-age" data-ts="${lk.ended_at}" data-run="${lk.run_num ?? ""}" style="color:#4fc3a1;">${lastKeyLabel(lk.run_num, lk.ended_at)}</span>`;
       }
     }
     inProgressEl.innerHTML = `Run <span class="current-run-highlight">${runs.length + 1}</span> in progress…${lastKeyHtml}`;
