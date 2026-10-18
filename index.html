@@ -87,6 +87,8 @@
   details.cor-fold[open] > summary::before { content: "▾"; }
   details.cor-fold > summary h3 { display: inline; margin: 0; }
   details.cor-fold[open] > summary { margin-bottom: 8px; }
+  .cor-fold-hint { font-family: -apple-system, "Segoe UI", sans-serif; font-weight: 600; font-size: 14px; color: #f0d878; margin-left: 4px; }
+  details.cor-fold[open] > summary .cor-fold-hint { display: none; }
   details.cor-biggroup { border: 1px solid #7a68a8; background: rgba(120,100,160,0.08); border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; }
   details.cor-biggroup > summary { font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700; color: #c8b8f0; }
   details.cor-biggroup > .cor-group:last-child { margin-bottom: 0; }
@@ -2497,7 +2499,7 @@ function corSoldGold(r) {
 
 // Foldable blocks (<details data-fold="key">). All start folded on every page
 // load; a block the user opens stays open across the live re-renders.
-const _corOpen = {};
+const _corOpen = { stats: true };   // Trial Stats group unfolded by default
 function corOpenAttr(key) { return _corOpen[key] ? " open" : ""; }
 document.addEventListener("toggle", ev => {
   const el = ev.target;
@@ -2567,7 +2569,7 @@ function corStatsParts(rows, opts = {}) {
       </div>
     </div>`,
     buying: `<details class="cor-group buying cor-fold" data-fold="buying"${corOpenAttr("buying")}>
-      <summary class="cor-group-title">🛒 Buying</summary>
+      <summary class="cor-group-title">🛒 Buying<span class="cor-fold-hint"> — Total Coronets Bought: ${bought.toLocaleString()}</span></summary>
       <div class="cor-stat-row">
       ${box("Total Coronets Bought", bought.toLocaleString())}
       ${box("Avg Bought per Keeper", perKeep(kept), "Coronets bought on average to get one worth keeping (bought ÷ kept)")}
@@ -2577,7 +2579,7 @@ function corStatsParts(rows, opts = {}) {
       </div>
     </details>`,
     time: `<details class="cor-group time cor-fold" data-fold="time"${corOpenAttr("time")}>
-      <summary class="cor-group-title">⏱️ Time</summary>
+      <summary class="cor-group-title">⏱️ Time<span class="cor-fold-hint"> — Total Time Spent: ${corFmtDur(totalTimeSec)}</span></summary>
       <div class="cor-group-sub">${timeNote}</div>
       <div class="cor-stat-row">
         ${box("⏳ Total Time Spent", corFmtDur(totalTimeSec))}
@@ -2587,7 +2589,7 @@ function corStatsParts(rows, opts = {}) {
       </div>
     </details>`,
     net: `<details class="cor-group net cor-fold" data-fold="net"${corOpenAttr("net")}>
-      <summary class="cor-group-title">Net cost — after selling back</summary>
+      <summary class="cor-group-title">Net cost — after selling back<span class="cor-fold-hint"> — Net Gold Spent: ${approx}${netSpent.toLocaleString()}</span></summary>
       <div class="cor-group-sub">Gross cost with the gold received from sold coronets deducted (${netNote}).</div>
       <div class="cor-stat-row">
         ${box("Net Gold Spent", approx + netSpent.toLocaleString(), `Gross gold spent minus gold from selling the non-keepers back. ${netNote}`)}
@@ -2596,7 +2598,7 @@ function corStatsParts(rows, opts = {}) {
       </div>
     </details>`,
     gross: `<details class="cor-group gross cor-fold" data-fold="gross"${corOpenAttr("gross")}>
-      <summary class="cor-group-title">Gross cost — all gold paid</summary>
+      <summary class="cor-group-title">Gross cost — all gold paid<span class="cor-fold-hint"> — Total Gold Spent: ${goldSpent.toLocaleString()}</span></summary>
       <div class="cor-group-sub">Counts every coronet bought; the gold you got back from selling the non-keepers is NOT deducted.</div>
       <div class="cor-stat-row">
         ${box("Total Gold Spent", goldSpent.toLocaleString())}
