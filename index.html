@@ -81,6 +81,15 @@
   .cor-kept-box.sockets { border-color: #1D9E75; } .cor-kept-box.sockets .cor-kept-value { color: #3ecf9a; }
   .cor-kept-box.amazon { border-color: #9C5FD8; } .cor-kept-box.amazon .cor-kept-value { color: #c39cf0; }
   .cor-kept-box.fwr { border-color: #E0A030; } .cor-kept-box.fwr .cor-kept-value { color: #f0c26a; }
+  details.cor-fold > summary { cursor: pointer; list-style: none; user-select: none; }
+  details.cor-fold > summary::-webkit-details-marker { display: none; }
+  details.cor-fold > summary::before { content: "▸"; display: inline-block; width: 1.3em; }
+  details.cor-fold[open] > summary::before { content: "▾"; }
+  details.cor-fold > summary h3 { display: inline; margin: 0; }
+  details.cor-fold[open] > summary { margin-bottom: 8px; }
+  details.cor-biggroup { border: 1px solid #7a68a8; background: rgba(120,100,160,0.08); border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; }
+  details.cor-biggroup > summary { font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700; color: #c8b8f0; }
+  details.cor-biggroup > .cor-group:last-child { margin-bottom: 0; }
   .cor-group.gold { border-color: #c9a227; background: rgba(201,162,39,0.06); }
   .cor-group.gold .cor-group-title { color: #f0d878; }
   .cor-gold-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -414,21 +423,21 @@
   <div class="panel" id="corLiveSummaryPanel">
     <div id="corLiveSummary"></div>
   </div>
-  <div class="panel" id="corLiveRunPanel">
-    <h3 style="margin:0 0 10px;">Runs (stash withdraw → betting → optional deposit; newest first)</h3>
+  <details class="panel cor-fold" id="corLiveRunPanel" data-fold="runs">
+    <summary><h3>Runs (stash withdraw → betting → optional deposit; newest first)</h3></summary>
     <table class="run-table">
       <thead id="corLiveRunHead"></thead>
       <tbody id="corLiveRunBody"></tbody>
     </table>
-  </div>
-  <div class="panel" id="corLiveBatchPanel">
-    <h3 style="margin:0 0 10px;">Batches (this trial, newest first)</h3>
+  </details>
+  <details class="panel cor-fold" id="corLiveBatchPanel" data-fold="batches">
+    <summary><h3>Batches (this trial, newest first)</h3></summary>
     <table class="run-table">
       <thead><tr><th>run</th><th>batch</th><th>status</th><th>bought</th><th>kept</th><th>sold</th><th>gold spent</th><th>sold for</th><th>net</th><th>refresh</th><th>took</th><th>when</th></tr></thead>
       <tbody id="corLiveBatchBody"></tbody>
     </table>
     <div id="corLiveBatchEmpty" class="empty-state" style="display:none;">No batches finished yet.</div>
-  </div>
+  </details>
 </div>
 
 <div id="coronetHistoryPanel" style="display:none;">
@@ -2486,6 +2495,21 @@ function corSoldGold(r) {
   return { v: Math.max(0, (r.coronets_bought || 0) - (r.coronets_kept || 0)) * COR_EST_SALE_PRICE, est: true };
 }
 
+// Foldable blocks (<details data-fold="key">). All start folded on every page
+// load; a block the user opens stays open across the live re-renders.
+const _corOpen = {};
+function corOpenAttr(key) { return _corOpen[key] ? " open" : ""; }
+document.addEventListener("toggle", ev => {
+  const el = ev.target;
+  if (el && el.matches && el.matches("details[data-fold]")) _corOpen[el.getAttribute("data-fold")] = el.open;
+}, true);
+// The big "Stats" group wrapping Buying / Time / Net cost / Gross cost.
+function corStatsGroupHtml(P) {
+  return `<details class="cor-fold cor-biggroup" data-fold="stats"${corOpenAttr("stats")}>` +
+    `<summary>📊 Trial Stats — buying, time, net &amp; gross cost</summary>` +
+    P.buying + P.time + P.net + P.gross + `</details>`;
+}
+
 // rows = trials. opts.batchCount swaps the "Trials" box for a "Batches" box
 // (live view). Same maths as the old standalone coronets page.
 function corStatsParts(rows, opts = {}) {
@@ -2542,8 +2566,8 @@ function corStatsParts(rows, opts = {}) {
         ${keptBox("fwr", "cat-boots.png", "FWR + Skill", fwr, perKeepSub(fwr))}
       </div>
     </div>`,
-    buying: `<div class="cor-group buying">
-      <div class="cor-group-title">🛒 Buying</div>
+    buying: `<details class="cor-group buying cor-fold" data-fold="buying"${corOpenAttr("buying")}>
+      <summary class="cor-group-title">🛒 Buying</summary>
       <div class="cor-stat-row">
       ${box("Total Coronets Bought", bought.toLocaleString())}
       ${box("Avg Bought per Keeper", perKeep(kept), "Coronets bought on average to get one worth keeping (bought ÷ kept)")}
@@ -2551,9 +2575,9 @@ function corStatsParts(rows, opts = {}) {
       ${box("Refresh Clicked", refreshClicks.toLocaleString())}
       ${opts.showTrials ? box("Trials", rows.length) : ""}
       </div>
-    </div>`,
-    time: `<div class="cor-group time">
-      <div class="cor-group-title">⏱️ Time</div>
+    </details>`,
+    time: `<details class="cor-group time cor-fold" data-fold="time"${corOpenAttr("time")}>
+      <summary class="cor-group-title">⏱️ Time</summary>
       <div class="cor-group-sub">${timeNote}</div>
       <div class="cor-stat-row">
         ${box("⏳ Total Time Spent", corFmtDur(totalTimeSec))}
@@ -2561,25 +2585,25 @@ function corStatsParts(rows, opts = {}) {
         ${box("⭐ Avg Time per Kept Coronet", avgT(totalTimeSec, kept), "Total time ÷ coronets kept")}
         ${box("🛒 Avg Time per Bought Coronet", avgT(totalTimeSec, bought), "Total time ÷ coronets bought")}
       </div>
-    </div>`,
-    net: `<div class="cor-group net">
-      <div class="cor-group-title">Net cost — after selling back</div>
+    </details>`,
+    net: `<details class="cor-group net cor-fold" data-fold="net"${corOpenAttr("net")}>
+      <summary class="cor-group-title">Net cost — after selling back</summary>
       <div class="cor-group-sub">Gross cost with the gold received from sold coronets deducted (${netNote}).</div>
       <div class="cor-stat-row">
         ${box("Net Gold Spent", approx + netSpent.toLocaleString(), `Gross gold spent minus gold from selling the non-keepers back. ${netNote}`)}
         ${box("Net Gold per Keeper", netPer(kept), `Net gold spent ÷ coronets kept. ${netNote}`)}
         ${box("Net Price per Coronet", netPer(bought), `Net gold spent ÷ coronets bought. ${netNote}`)}
       </div>
-    </div>`,
-    gross: `<div class="cor-group gross">
-      <div class="cor-group-title">Gross cost — all gold paid</div>
+    </details>`,
+    gross: `<details class="cor-group gross cor-fold" data-fold="gross"${corOpenAttr("gross")}>
+      <summary class="cor-group-title">Gross cost — all gold paid</summary>
       <div class="cor-group-sub">Counts every coronet bought; the gold you got back from selling the non-keepers is NOT deducted.</div>
       <div class="cor-stat-row">
         ${box("Total Gold Spent", goldSpent.toLocaleString())}
         ${box("Avg Gold per Keeper", goldPer(kept), "Total gold spent ÷ coronets kept (gross, before sell proceeds)")}
         ${box("Avg Price per Coronet", goldPer(bought), "Total gold spent ÷ coronets bought")}
       </div>
-    </div>`,
+    </details>`,
   };
 }
 
@@ -2587,7 +2611,7 @@ function corStatsParts(rows, opts = {}) {
 function corStatsBlockHtml(rows, opts = {}) {
   const P = corStatsParts(rows, opts);
   if (!P) return `<div class="empty-state">No trials in this period.</div>`;
-  return P.kept + P.buying + P.time + P.net + P.gross;
+  return P.kept + corStatsGroupHtml(P);
 }
 
 function corKeptChips(b) {
@@ -2696,15 +2720,15 @@ function corGoldHtml(g) {
     `<div class="cor-gold-box"><img src="assets/coronet/${icon}" alt=""><p class="cor-gold-label">${label}</p>` +
     `<p class="cor-gold-value">${val !== null && val !== undefined ? Number(val).toLocaleString() : "—"}</p>` +
     `<div class="cor-age" data-ts="${ts || ""}">${corAgeText(ts)}</div></div>`;
-  return `<div class="cor-group gold">
-      <div class="cor-group-title">💰 Gold</div>
+  return `<details class="cor-group gold cor-fold" data-fold="gold"${corOpenAttr("gold")}>
+      <summary class="cor-group-title">💰 Gold</summary>
       <div class="cor-group-sub">Latest in-game readings — each box is read at a different moment, so check its own timestamp.</div>
       <div class="cor-gold-grid">
         ${box("gold-shared.svg", "Shared Stash", g.shared_gold, g.shared_read_at)}
         ${box("gold-personal.svg", "Personal Stash", g.personal_gold, g.personal_read_at)}
         ${box("gold-inventory.svg", "Inventory Bag", g.inventory_gold, g.inventory_read_at)}
       </div>
-    </div>`;
+    </details>`;
 }
 
 async function corLoadBatches(trialId) {
@@ -2743,7 +2767,7 @@ async function coronetRefreshLive() {
     `Started ${new Date(trial.started_at).toLocaleString()} · ${corFmtDur(corTrialSec(trial))} ${isRunning ? "elapsed" : "total"} · ${rule}${stop}${staleNote}`;
   const P = corStatsParts([trial], { batchCount: batches.length });
   document.getElementById("corLiveKept").innerHTML = P.kept;
-  document.getElementById("corLiveSummary").innerHTML = P.buying + P.time + P.net + P.gross;
+  document.getElementById("corLiveSummary").innerHTML = corStatsGroupHtml(P);
   const runs = corGroupRuns(batches);
   // One-line live summary, same style as the Warlock/Summoner live pages.
   const tSec = corTrialSec(trial), nBought = trial.coronets_bought || 0, nKept = trial.coronets_kept || 0;
