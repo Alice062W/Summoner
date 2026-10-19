@@ -142,6 +142,13 @@ async function loadRunsForTrials(trialIds) {
   return fetchAllPages("warlock_runs", q => q.in("trial_id", trialIds));
 }
 
+// Per-batch rows of the betting trials (coronet_batches); a betting "run" = one
+// stash-withdraw trip, so its run count is the number of distinct run_no values.
+async function loadBatchesForTrials(trialIds) {
+  if (trialIds.length === 0) return [];
+  return fetchAllPages("coronet_batches", q => q.in("trial_id", trialIds));
+}
+
 // Groups both trial lists into { sessionId: { farming: [...], betting: [...] } },
 // sessions ordered newest-first by their earliest trial's started_at.
 function groupBySession(farmingTrials, bettingTrials) {
@@ -326,7 +333,16 @@ function bettingStatsHtml(betting) {
     </div>`;
 }
 
-function trialListHtml(farming, betting) {
+function trialListHtml(farming, betting, farmingRuns = [], bettingBatches = []) {
+  // Runs per trial: farming = rows in warlock_runs; betting = distinct run_no among
+  // its batches (null for trials recorded before batch tracking existed).
+  const farmRunCount = {};
+  for (const r of farmingRuns) farmRunCount[r.trial_id] = (farmRunCount[r.trial_id] || 0) + 1;
+  const betRunSets = {}, betBatchCount = {};
+  for (const b of bettingBatches) {
+    betBatchCount[b.trial_id] = (betBatchCount[b.trial_id] || 0) + 1;
+    if (b.run_no) (betRunSets[b.trial_id] = betRunSets[b.trial_id] || new Set()).add(b.run_no);
+  }
   const rows = [
     ...farming.map(t => ({ type: "farming", t })),
     ...betting.map(t => ({ type: "betting", t })),
@@ -344,17 +360,27 @@ function trialListHtml(farming, betting) {
     const detail = type === "farming"
       ? `${(t.gold_collected || 0).toLocaleString()} gold`
       : `${(t.gold_spent || 0).toLocaleString()} spent, ${t.coronets_bought || 0} bought, ${t.coronets_kept || 0} kept, ${fmtDur(t.started_at, t.ended_at)}`;
+    let runsCell;
+    if (type === "farming") {
+      runsCell = String(farmRunCount[t.trial_id] || 0);
+    } else {
+      const n = betRunSets[t.trial_id] ? betRunSets[t.trial_id].size : 0;
+      runsCell = n > 0
+        ? `<span title="${betBatchCount[t.trial_id] || 0} batches">${n}</span>`
+        : `<span title="No per-run data (trial recorded before run tracking)">—</span>`;
+    }
     return `<tr>
       <td><span class="type-badge ${type}">${type === "farming" ? "Farming" : "Betting"}</span></td>
       <td>${label}${running ? ' <span class="live-badge">● running</span>' : ""}</td>
       <td>${new Date(t.started_at).toLocaleString()}</td>
       <td>${fmtDur(t.started_at, t.ended_at)}</td>
+      <td>${runsCell}</td>
       <td>${detail}</td>
     </tr>`;
   }).join("");
 
   return `<table class="trial-table">
-    <thead><tr><th>Type</th><th>Trial</th><th>Started</th><th>Duration</th><th>Stats</th></tr></thead>
+    <thead><tr><th>Type</th><th>Trial</th><th>Started</th><th>Duration</th><th>Runs</th><th>Stats</th></tr></thead>
     <tbody>${trs}</tbody>
   </table>`;
 }
@@ -367,13 +393,14 @@ async function renderSession(sessionId, sessions) {
 
   const farmingIds = session.farming.map(t => t.trial_id);
   const runs = await loadRunsForTrials(farmingIds);
+  const bettingBatches = await loadBatchesForTrials(session.betting.map(t => t.trial_id));
 
   body.innerHTML =
     statsRowHtml(session.farming, session.betting) +
     farmingStatsHtml(session.farming, runs) +
     bettingStatsHtml(session.betting) +
     `<h3 class="section-h" style="margin-top:16px;">Trials This Session</h3>` +
-    trialListHtml(session.farming, session.betting);
+    trialListHtml(session.farming, session.betting, runs, bettingBatches);
 }
 
 function populateSessionPicker(ids, sessions) {
