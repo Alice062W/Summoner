@@ -1800,6 +1800,12 @@ function renderTrialSummary(elId, runs, maxRuns, trial = null) {
   if (trial && trial.started_at) {
     const endTime = trial.ended_at ? new Date(trial.ended_at) : new Date();
     const totalSec = (endTime - new Date(trial.started_at)) / 1000;
+    if (currentBot !== "warlock") {
+      // Minutes per key = trial elapsed time / key items picked up (the
+      // reciprocal of the keys/hr figure at the end of this line).
+      const keyItems = runs.reduce((s, r) => s + (r.loots || []).filter(l => l.is_key).length, 0);
+      text += ` — avg ${keyItems > 0 ? (totalSec / 60 / keyItems).toFixed(1) : "-"} mins/key`;
+    }
     text += ` — total ${fmtSeconds(totalSec)}`;
     // Summoner-only overall rates over the trial's elapsed wall-clock time
     // (climbs live while running). Keys = is_key loot items picked up.
