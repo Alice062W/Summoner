@@ -1804,7 +1804,7 @@ function renderTrialSummary(elId, runs, maxRuns, trial = null) {
       // Minutes per key = trial elapsed time / key items picked up (the
       // reciprocal of the keys/hr figure at the end of this line).
       const keyItems = runs.reduce((s, r) => s + (r.loots || []).filter(l => l.is_key).length, 0);
-      text += ` — avg ${keyItems > 0 ? (totalSec / 60 / keyItems).toFixed(1) : "-"} mins/key`;
+      text += ` — <span style="color:#ffce54; font-weight:700;">avg ${keyItems > 0 ? (totalSec / 60 / keyItems).toFixed(1) : "-"} mins/key</span>`;
     }
     text += ` — total ${fmtSeconds(totalSec)}`;
     // Summoner-only overall rates over the trial's elapsed wall-clock time
@@ -1815,7 +1815,9 @@ function renderTrialSummary(elId, runs, maxRuns, trial = null) {
       text += ` — ${(runs.length / hrs).toFixed(1)} runs/hr — ${(keys / hrs).toFixed(2)} keys/hr`;
     }
   }
-  document.getElementById(elId).textContent = text;
+  // innerHTML so the mins/key highlight span renders; `text` is built only
+  // from numbers and fixed labels (no user-supplied strings).
+  document.getElementById(elId).innerHTML = text;
 }
 
 function pct(n, d) {
