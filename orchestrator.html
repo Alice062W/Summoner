@@ -288,8 +288,8 @@ function farmingStatsHtml(farming, runs) {
     <div class="stat-row">
       <div class="stat-box"><div class="stat-label">🪙 Gold / Hour</div><div class="stat-value">${goldPerHour.toLocaleString()}</div></div>
       <div class="stat-box"><div class="stat-label">⚡ Runs / Hour</div><div class="stat-value">${runsPerHour.toLocaleString()}</div></div>
-      <div class="stat-box"><div class="stat-label">📜 Runs w/ Chronicle Kept</div><div class="stat-value">${chronicleKeptRuns}</div></div>
       <div class="stat-box"><div class="stat-label">Merc rev. / Stash fails</div><div class="stat-value">🧟 ${mercRevivals} · 🧺❌ ${stashFails}</div></div>
+      <div class="stat-box"><div class="stat-label">📜 Runs w/ Chronicle Kept</div><div class="stat-value">${chronicleKeptRuns}</div></div>
       <div class="stat-box"><div class="stat-label">⭐ Runs w/ Valuable Kept</div><div class="stat-value">${valuableRuns}</div></div>
     </div>
     ${valuableChips ? `<div class="loot-tally">${valuableChips}</div>` : ""}
